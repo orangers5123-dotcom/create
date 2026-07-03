@@ -1,0 +1,9 @@
+# Silence detection shells out to the system ffmpeg/ffprobe binaries --
+# make sure they're on PATH (brew install ffmpeg / apt install ffmpeg / etc).
+# No Python package needed for that part.
+
+# Filler-word removal (only needed if you pass --filler-words):
+google-cloud-speech>=2.21.0
+
+# Running the test suite:
+pytest>=7.0
