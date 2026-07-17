@@ -47,16 +47,32 @@ GUIが開いたら、モード（通常 / 2カメ同期）・入力・カット�
 
 ## アプリ化（.app として配布）
 
-macOS上でダブルクリック起動できる `.app` にまとめる場合は [py2app](https://py2app.readthedocs.io/)
-を使う（py2app自体はMac上でしか実行できない）:
+macOS上でダブルクリック起動できる `.app` にまとめる方法は2通り用意している。
+
+### PyInstaller（推奨）
+
+```bash
+pip install -r requirements.txt pyinstaller
+pyinstaller --name "Auto Cut" --windowed --collect-all customtkinter run_app.py
+```
+
+`dist/Auto Cut.app` が生成される。numpy/scipy向けの専用フックが整備されているため、
+`py2app` より依存関係の解決が安定している（後述の理由で `py2app` は現状動かないことがある）。
+
+### py2app（既知の問題あり）
 
 ```bash
 pip install -r requirements.txt py2app
 python3 setup_mac_app.py py2app
 ```
 
-`dist/Auto Cut.app` が生成される。ffmpeg/ffprobeはバンドルされないので、
-実行するMacには別途インストールしておく必要がある。
+**注意**: Python 3.14 + 最新版numpy/scipyの組み合わせでは、py2appの依存解析
+（`modulegraph`、ASTを再帰的に辿る古い実装）がnumpyの複雑なimport構造を処理しきれず、
+`sys.setrecursionlimit()` やスレッドのスタックサイズを増やしても
+`RecursionError` で失敗することを確認している。動かない場合はPyInstallerを使ってほしい。
+
+いずれの方法でも、ffmpeg/ffprobeはバンドルされないので、実行するMacには
+別途インストールしておく必要がある。
 
 ## 構成
 

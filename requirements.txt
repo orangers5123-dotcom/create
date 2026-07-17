@@ -14,7 +14,8 @@ scipy>=1.10
 customtkinter>=5.2
 
 # Building a double-clickable macOS .app bundle (see silence_cut_app/README.md):
-# py2app>=0.28
+# pyinstaller>=6.0   (recommended)
+# py2app>=0.28       (has known RecursionError issues with newer Python + numpy/scipy)
 
 # Running the test suite:
 pytest>=7.0
