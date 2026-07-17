@@ -5,12 +5,13 @@
 # Filler-word removal (only needed if you pass --filler-words):
 google-cloud-speech>=2.21.0
 
-# silence_cut_app (standalone desktop app): 2-camera audio sync via
-# cross-correlation. tkinter is also required for the GUI -- it ships with
-# the standard python.org macOS installer, but Homebrew's python needs
-# `brew install python-tk` alongside it.
+# silence_cut_app / Auto Cut (standalone desktop app): 2-camera audio sync
+# via cross-correlation, plus the customtkinter-based dark GUI. tkinter
+# itself ships with the standard python.org macOS installer, but Homebrew's
+# python needs `brew install python-tk` alongside it.
 numpy>=1.24
 scipy>=1.10
+customtkinter>=5.2
 
 # Building a double-clickable macOS .app bundle (see silence_cut_app/README.md):
 # py2app>=0.28
