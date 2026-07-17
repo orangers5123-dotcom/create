@@ -39,3 +39,18 @@ def probe_fps(file_path: str) -> float:
         ]
     )
     return parse_frame_rate(out)
+
+
+def probe_dimensions(file_path: str):
+    """Return ``(width, height)`` of a file's first video stream."""
+
+    out = _run_ffprobe(
+        [
+            "-select_streams", "v:0",
+            "-show_entries", "stream=width,height",
+            "-of", "default=noprint_wrappers=1",
+            file_path,
+        ]
+    )
+    values = dict(line.split("=", 1) for line in out.splitlines() if "=" in line)
+    return int(values["width"]), int(values["height"])
