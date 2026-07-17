@@ -1,7 +1,8 @@
-# 無音自動カット（Silence Auto-Cut）
+# Auto Cut（無音自動カット）
 
 動画を読み込んで無音区間を自動検出・カットし、結果を **FCP7 XML v5**（`.xml`）として
 書き出すデスクトップGUIアプリ。フィラーワード検出はしない、無音カット専用。
+黒×紫のダークテーマ（customtkinter製）。
 
 DaVinci Resolveのプロジェクトを直接操作する `davinci_auto_cut`（リポジトリ直下）とは
 別物。こちらはResolveのスクリプティングAPIを使わず、ffmpegで無音区間を検出し、
@@ -54,7 +55,7 @@ pip install -r requirements.txt py2app
 python3 setup_mac_app.py py2app
 ```
 
-`dist/SilenceAutoCut.app` が生成される。ffmpeg/ffprobeはバンドルされないので、
+`dist/Auto Cut.app` が生成される。ffmpeg/ffprobeはバンドルされないので、
 実行するMacには別途インストールしておく必要がある。
 
 ## 構成
@@ -65,7 +66,8 @@ silence_cut_app/
   fcp7_xml.py     FCP7 XML v5の読み込み・書き出し（xmeml v5サブセット）
   sync.py         2カメの音声波形による自動同期（相互相関）
   cut_engine.py   全体の処理フロー（無音検出→キープ区間計算→XML書き出し）
-  gui.py          Tkinter GUI
+  theme.py        配色パレット（黒×紫のダークテーマ）
+  gui.py          customtkinter製GUI（アプリ名: Auto Cut）
   __main__.py     `python -m silence_cut_app` のエントリーポイント
 ```
 
