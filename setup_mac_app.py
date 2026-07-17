@@ -11,7 +11,16 @@ they must be installed separately (e.g. `brew install ffmpeg`) on any
 machine that runs the app.
 """
 
+import sys
+
 from setuptools import setup
+
+# py2app's dependency scanner (modulegraph) walks each module's AST with a
+# plain recursive visitor. Large packages like numpy/scipy -- especially
+# under newer Python versions -- can nest deep enough to blow the default
+# recursion limit (1000) partway through the scan (RecursionError). This is
+# a build-time-only workaround; it doesn't affect the app's own behavior.
+sys.setrecursionlimit(10000)
 
 APP = ["silence_cut_app/__main__.py"]
 DATA_FILES = []
