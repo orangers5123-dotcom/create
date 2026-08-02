@@ -13,7 +13,13 @@ numpy>=1.24
 scipy>=1.10
 customtkinter>=5.2
 
-# Building a double-clickable macOS .app bundle (see silence_cut_app/README.md):
+# create_text_app / Create Text (standalone desktop app): local speech-to-text.
+# CPU-only by default; the first run of a given model size downloads its
+# weights from Hugging Face Hub (needs network once, then works offline).
+faster-whisper>=1.0
+
+# Building a double-clickable macOS .app bundle (see silence_cut_app/README.md
+# and create_text_app/README.md):
 # pyinstaller>=6.0   (recommended)
 # py2app>=0.28       (has known RecursionError issues with newer Python + numpy/scipy)
 

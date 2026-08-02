@@ -1,12 +1,15 @@
 # davinci-auto-cut
 
-このリポジトリには2つのツールがあります。
+このリポジトリには3つのツールがあります。
 
 - **`davinci_auto_cut/`**（このREADMEで説明）: DaVinci Resolveのプロジェクトを
   Scripting API経由で直接編集するツール。Resolveの起動が必須。
-- **`silence_cut_app/`**（[README](silence_cut_app/README.md)）: 動画ファイルや
-  FCP7 XML v5を読み込み、無音カット後のXMLを書き出すスタンドアロンのデスクトップ
-  GUIアプリ。Resolve不要で、2カメの音声自動同期にも対応。
+- **`silence_cut_app/`**（[README](silence_cut_app/README.md)、アプリ名 **Auto Cut**）:
+  動画ファイルやFCP7 XML v5を読み込み、無音カット後のXMLを書き出すスタンドアロン
+  のデスクトップGUIアプリ。Resolve不要で、2カメの音声自動同期にも対応。
+- **`create_text_app/`**（[README](create_text_app/README.md)、アプリ名 **Create Text**）:
+  ローカルWhisperで動画・音声を文字起こしし、Vrewのようにテキスト一覧を見ながら
+  修正してSRT/TXT/VTTを書き出すスタンドアロンのデスクトップGUIアプリ。
 
 ## davinci_auto_cut について
 
