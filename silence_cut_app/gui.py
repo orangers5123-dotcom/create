@@ -120,15 +120,8 @@ class SilenceCutApp:
             font=ctk.CTkFont(family=theme.FONT_FAMILY, size=13, weight="bold"),
         ).pack(anchor="w")
 
-        # All the settings panels live in a scrollable area -- their combined
-        # height easily exceeds a laptop screen (file list + 2cam inputs +
-        # intensity + output can top 1000px), so this scrolls instead of
-        # squeezing the start button/log down to nothing.
-        self.settings_scroll = ctk.CTkScrollableFrame(self.root, fg_color="transparent")
-        self.settings_scroll.pack(fill="both", expand=True)
-
-        # -- mode --
-        mode_panel = _panel(self.settings_scroll)
+        # -- mode -- (fixed, always visible -- never worth scrolling to reach)
+        mode_panel = _panel(self.root)
         mode_panel.pack(fill="x", **pad)
         inner = ctk.CTkFrame(mode_panel, fg_color="transparent")
         inner.pack(fill="x", padx=16, pady=14)
@@ -137,8 +130,15 @@ class SilenceCutApp:
         self.mode_selector.set(self.mode)
         self.mode_selector.pack(fill="x")
 
+        # Only the file/XML/2cam input details go in a scrollable area --
+        # this is the one section whose height varies a lot (a long file
+        # list can get tall). Mode, intensity, and output stay fixed below
+        # so they're always reachable without having to discover scrolling.
+        self.input_scroll = ctk.CTkScrollableFrame(self.root, fg_color="transparent")
+        self.input_scroll.pack(fill="both", expand=True, padx=0, pady=0)
+
         # -- normal mode input --
-        self.normal_frame = _panel(self.settings_scroll)
+        self.normal_frame = _panel(self.input_scroll)
         inner = ctk.CTkFrame(self.normal_frame, fg_color="transparent")
         inner.pack(fill="both", expand=True, padx=16, pady=14)
         _section_label(inner, "入力（通常モード）").pack(anchor="w", pady=(0, 8))
@@ -167,7 +167,7 @@ class SilenceCutApp:
         )
 
         # -- two-camera mode input --
-        self.twocam_frame = _panel(self.settings_scroll)
+        self.twocam_frame = _panel(self.input_scroll)
         inner = ctk.CTkFrame(self.twocam_frame, fg_color="transparent")
         inner.pack(fill="x", padx=16, pady=14)
         _section_label(inner, "入力（2カメ同期モード）").pack(anchor="w", pady=(0, 8))
@@ -196,8 +196,8 @@ class SilenceCutApp:
             text_color=theme.TEXT_MUTED, font=ctk.CTkFont(family=theme.FONT_FAMILY, size=11),
         ).pack(anchor="w", pady=(6, 0))
 
-        # -- intensity --
-        self.intensity_panel = _panel(self.settings_scroll)
+        # -- intensity -- (fixed, always visible)
+        self.intensity_panel = _panel(self.root)
         intensity_panel = self.intensity_panel
         intensity_panel.pack(fill="x", **pad)
         inner = ctk.CTkFrame(intensity_panel, fg_color="transparent")
@@ -209,8 +209,8 @@ class SilenceCutApp:
         self.intensity_selector.set(self.intensity_label)
         self.intensity_selector.pack(fill="x")
 
-        # -- output --
-        output_panel = _panel(self.settings_scroll)
+        # -- output -- (fixed, always visible -- this is what was getting lost)
+        output_panel = _panel(self.root)
         output_panel.pack(fill="x", **pad)
         inner = ctk.CTkFrame(output_panel, fg_color="transparent")
         inner.pack(fill="x", padx=16, pady=14)
@@ -259,12 +259,15 @@ class SilenceCutApp:
 
     def _refresh_mode_frames(self):
         pad = {"padx": 18, "pady": 8}
+        # normal_frame/twocam_frame are the only two children of input_scroll
+        # and only one is ever shown at a time, so there's no packing order
+        # to preserve here -- no `before=` needed.
         if self.mode == MODE_NORMAL:
             self.twocam_frame.pack_forget()
-            self.normal_frame.pack(fill="both", expand=True, **pad, before=self.intensity_panel)
+            self.normal_frame.pack(fill="both", expand=True, **pad)
         else:
             self.normal_frame.pack_forget()
-            self.twocam_frame.pack(fill="x", **pad, before=self.intensity_panel)
+            self.twocam_frame.pack(fill="x", **pad)
 
         if self.input_kind == KIND_FILES:
             self.xml_frame.pack_forget()
