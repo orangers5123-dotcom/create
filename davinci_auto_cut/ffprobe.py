@@ -3,13 +3,15 @@
 import subprocess
 from fractions import Fraction
 
+from davinci_auto_cut.ffmpeg_locate import locate
+
 
 class FfprobeError(RuntimeError):
     pass
 
 
 def _run_ffprobe(args) -> str:
-    cmd = ["ffprobe", "-v", "error", *args]
+    cmd = [locate("ffprobe"), "-v", "error", *args]
     result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if result.returncode != 0:
         raise FfprobeError(result.stderr.decode("utf-8", errors="replace"))
