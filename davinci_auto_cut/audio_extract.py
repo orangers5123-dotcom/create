@@ -4,6 +4,8 @@ import os
 import subprocess
 import tempfile
 
+from davinci_auto_cut.ffmpeg_locate import locate
+
 
 class FfmpegError(RuntimeError):
     pass
@@ -29,7 +31,7 @@ def extract_audio_segment(
     os.close(fd)
 
     cmd = [
-        "ffmpeg",
+        locate("ffmpeg"),
         "-y",
         "-ss", f"{start_sec:.6f}",
         "-i", file_path,
