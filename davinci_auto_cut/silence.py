@@ -4,6 +4,8 @@ import re
 import subprocess
 from typing import List, Tuple
 
+from davinci_auto_cut.ffmpeg_locate import locate
+
 _SILENCE_START_RE = re.compile(r"silence_start:\s*(-?[0-9.]+)")
 _SILENCE_END_RE = re.compile(r"silence_end:\s*(-?[0-9.]+)")
 
@@ -35,7 +37,7 @@ def detect_silence(
     """
 
     cmd = [
-        "ffmpeg",
+        locate("ffmpeg"),
         "-i", wav_path,
         "-af", f"silencedetect=noise={threshold_db}dB:d={min_duration}",
         "-f", "null",
