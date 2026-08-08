@@ -12,6 +12,7 @@ from davinci_auto_cut.audio_extract import extract_audio_segment
 from davinci_auto_cut.ffprobe import probe_duration
 
 from create_text_app.subtitles import Segment, format_srt_timestamp
+from create_text_app.whisper_model import get_model
 
 ProgressCallback = Optional[Callable[[str], None]]
 
@@ -58,7 +59,7 @@ def transcribe(
 
     try:
         _log(progress_cb, f"Whisperモデル（{model_size}）を読み込み中...（初回はダウンロードが発生します）")
-        model = WhisperModel(model_size, device="cpu", compute_type="int8")
+        model = get_model(model_size)
 
         _log(progress_cb, "文字起こし中...")
         transcribe_kwargs = {}

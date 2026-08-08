@@ -52,9 +52,21 @@ macOS上でダブルクリック起動できる `.app` にまとめる方法は2
 ### PyInstaller（推奨）
 
 ```bash
+./bundle_ffmpeg.sh   # ffmpeg/ffprobeを vendor/ffmpeg_bin/ にコピー（初回・更新時のみ）
 pip install -r requirements.txt pyinstaller
-pyinstaller --name "Auto Cut" --windowed --collect-all customtkinter run_app.py
+pyinstaller --name "Auto Cut" --windowed \
+  --collect-all customtkinter \
+  --add-binary "vendor/ffmpeg_bin/ffmpeg:ffmpeg_bin" \
+  --add-binary "vendor/ffmpeg_bin/ffprobe:ffmpeg_bin" \
+  run_app.py
 ```
+
+`--add-binary` でffmpeg/ffprobeをアプリ本体に同梱している。これにより、Finderから
+起動した際にPATHが見えず`ffmpeg`が見つからないという問題が原理的に起きなくなる
+（[`davinci_auto_cut/ffmpeg_locate.py`](../davinci_auto_cut/ffmpeg_locate.py)が、
+まず同梱されたバイナリを優先して使う）。`bundle_ffmpeg.sh`を実行していない場合や
+`vendor/ffmpeg_bin/`が無い場合は、`--add-binary`の行を省いてビルドしても動く
+（その場合は従来どおりPATH頼みになる）。
 
 `dist/Auto Cut.app` が生成される。numpy/scipy向けの専用フックが整備されているため、
 `py2app` より依存関係の解決が安定している（後述の理由で `py2app` は現状動かないことがある）。
@@ -71,8 +83,9 @@ python3 setup_mac_app.py py2app
 `sys.setrecursionlimit()` やスレッドのスタックサイズを増やしても
 `RecursionError` で失敗することを確認している。動かない場合はPyInstallerを使ってほしい。
 
-いずれの方法でも、ffmpeg/ffprobeはバンドルされないので、実行するMacには
-別途インストールしておく必要がある。
+PyInstallerで`--add-binary`を使わない場合や、py2appでビルドする場合は
+ffmpeg/ffprobeはバンドルされないので、実行するMacには別途インストールして
+おく必要がある。
 
 ## 構成
 
