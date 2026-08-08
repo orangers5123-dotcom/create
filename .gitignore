@@ -1,3 +1,8 @@
 __pycache__/
 *.pyc
 .pytest_cache/
+
+# Machine-local copies of ffmpeg/ffprobe made by bundle_ffmpeg.sh for
+# --add-binary -- these are copies of whatever's installed on the Mac doing
+# the build, not something to commit.
+/vendor/

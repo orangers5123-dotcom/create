@@ -38,7 +38,8 @@ Whisperによる自動書き起こしの代わりに、動画を見ながらユ�
    （区間の長さ・タイミングはこの時点で確定済みなので、テキストだけが
    後から埋まる形）
 4. 開始・終了時刻、テキストはあとから直接編集可能。「▶」で該当セグメントの
-   開始位置にプレビューをジャンプ、「✕」で削除
+   開始位置にプレビューをジャンプし、**実際の音声を再生**（無音の静止画
+   プレビューだけでは分かりにくいIN/OUTの当たりを耳で確認できる）。「✕」で削除
 5. 書き出し:
    - **SRT**: 字幕ファイルとしてそのまま使える
    - **XML**（FCP7 XML v5）: 読み込んだ動画をそのまま乗せた1本のクリップに、
@@ -47,9 +48,33 @@ Whisperによる自動書き起こしの代わりに、動画を見ながらユ�
      上にマーカーとしてキャプションの位置とテキストが並ぶので、そこから
      字幕やテロップに仕立てやすい
 
-マイク録音は [sounddevice](https://python-sounddevice.readthedocs.io/)
+マイク録音・音声再生は [sounddevice](https://python-sounddevice.readthedocs.io/)
 （PortAudio）を使用。動画プレビューのフレーム取得はffmpegで都度1枚抜き出す
-方式なので、動画自体の再生・音声再生はできない（あくまで位置確認用）。
+方式なので、動画自体のリアルタイム再生はできない（あくまで静止フレームでの
+位置確認用。実際の音声は「▶」ボタンでその区間だけ再生できる）。
+
+### プロジェクトの保存/読み込み
+
+書き出し（SRT/XML）とは別に、作業途中の状態（動画パス＋セグメント一覧）を
+JSONとして保存・復元できる。「プロジェクトを保存」でファイルに書き出し、
+「プロジェクトを開く」で読み込む。動画ファイルが元の場所から動いていると
+プレビューは出せないが、セグメント自体は読み込まれるので「参照...」で
+動画を選び直せば続きから作業できる。
+
+### キーボードショートカット
+
+手動モードの画面上でテキスト欄にフォーカスしていない状態なら、以下が使える。
+
+| キー | 動作 |
+| --- | --- |
+| `I` | 現在位置をINに設定 |
+| `O` | 現在位置をOUTに設定 |
+| `Enter` | セグメントを追加 |
+| `R` | 一番最後のセグメントの録音を開始/終了 |
+| `Space` | 一番最後のセグメントを再生（プレビュー移動＋音声再生） |
+
+`IN → OUT → Enter → R → (喋る) → R` のように、マウスに触れずキーボードだけで
+一連の作業ができる。
 
 ## セットアップ（Mac）
 
@@ -77,11 +102,14 @@ python3 -m create_text_app
 ## アプリ化（.app として配布）
 
 ```bash
+./bundle_ffmpeg.sh   # ffmpeg/ffprobeを vendor/ffmpeg_bin/ にコピー（初回・更新時のみ）
 pip install -r requirements.txt pyinstaller
 pyinstaller --name "Create Text" --windowed \
   --collect-all customtkinter \
   --collect-data faster_whisper \
   --collect-all sounddevice \
+  --add-binary "vendor/ffmpeg_bin/ffmpeg:ffmpeg_bin" \
+  --add-binary "vendor/ffmpeg_bin/ffprobe:ffmpeg_bin" \
   run_create_text.py
 ```
 
@@ -92,6 +120,13 @@ pyinstaller --name "Create Text" --windowed \
 同様に `--collect-all sounddevice` もPortAudioのバイナリを確実に含めるため
 に付けている。
 
+`--add-binary` の2行はffmpeg/ffprobeをアプリ本体に同梱するためのもの。これ
+により、Finderから起動した際にPATHが見えず`ffmpeg`が見つからないという問題
+が原理的に起きなくなる（[`davinci_auto_cut/ffmpeg_locate.py`](../davinci_auto_cut/ffmpeg_locate.py)
+が、まず同梱されたバイナリを優先して使う）。`bundle_ffmpeg.sh`を実行して
+いない場合や`vendor/ffmpeg_bin/`が無い場合は、この2行を省いてビルドしても
+動く（その場合は従来どおりPATH頼みになる）。
+
 `dist/Create Text.app` が生成される。アイコンを付ける場合は
 [`make_icns.sh`](../make_icns.sh) でPNGから`.icns`を作り、
 `--icon path/to/icon.icns` を追加する。
@@ -100,8 +135,8 @@ pyinstaller --name "Create Text" --windowed \
 tokenizers など）でも Auto Cut と同様の `RecursionError` に当たる可能性が
 高いため、Create Text では検証しておらず推奨しない。PyInstallerを使うこと。
 
-ffmpeg/ffprobeはバンドルされないので、実行するMacには別途インストールして
-おく必要がある。
+`--add-binary`を使わずにビルドした場合は、ffmpeg/ffprobeはバンドルされない
+ので、実行するMacには別途インストールしておく必要がある。
 
 ## 構成
 
@@ -112,9 +147,12 @@ create_text_app/
   whisper_model.py       WhisperModelのキャッシュ（モデルサイズごとに使い回す）
   frame_extract.py       手動モード: ffmpegで指定時刻のフレームを1枚抜き出す
   mic_recorder.py         手動モード: sounddeviceでマイク録音してWAVに書き出す
+  audio_playback.py       手動モード: sounddeviceでセグメントの音声を再生
   manual_transcribe.py    手動モード: 録音した短いWAVクリップ1本を文字起こし
+  manual_project.py       手動モード: 動画パス＋セグメント一覧をJSONで保存/読み込み
   fcp7_markers.py         手動モード: セグメントをFCP7 XML（シーケンスマーカー）に書き出す
-  gui.py                 customtkinter製GUI（自動/手動モードの切り替え含む）
+  gui.py                 customtkinter製GUI（自動/手動モードの切り替え・キーボード
+                          ショートカット含む）
   __main__.py             `python -m create_text_app` のエントリーポイント
 ```
 
@@ -131,21 +169,24 @@ pytest tests/ -v
 ```
 
 `test_subtitles.py`・`test_frame_extract.py`・`test_fcp7_markers.py`・
-`test_mic_recorder.py`・`test_manual_transcribe.py`・`test_whisper_model.py`
-は純粋ロジック/モック済みのユニットテスト（`test_frame_extract.py`は実際に
-ffmpegでテスト用の映像を生成して検証、それ以外は`faster_whisper`/
-`sounddevice`をフェイクに差し替えてテスト）。`faster-whisper`による実際の
-音声認識・モデルダウンロードはネットワークアクセスを伴うため自動テストの
-対象外。GUI自体はXvfb上でのヘッドレス起動・スモークテスト（自動/手動モード
-双方の一連の操作フロー）で確認済み。
+`test_mic_recorder.py`・`test_manual_transcribe.py`・`test_whisper_model.py`・
+`test_audio_playback.py`・`test_manual_project.py`は純粋ロジック/モック済みの
+ユニットテスト（`test_frame_extract.py`は実際にffmpegでテスト用の映像を
+生成して検証、それ以外は`faster_whisper`/`sounddevice`をフェイクに差し替えて
+テスト）。`faster-whisper`による実際の音声認識・モデルダウンロードはネット
+ワークアクセスを伴うため自動テストの対象外。GUI自体はXvfb上でのヘッドレス
+起動・スモークテスト（自動/手動モード双方の一連の操作フロー、キーボード
+ショートカット、プロジェクト保存/読み込み、セグメント音声再生）で確認済み。
 
 ## 既知の制限・未検証点
 
 - **実機での文字起こし精度・速度は未検証**: 実際に音声ファイル/マイクを
   渡してモデルをダウンロード→文字起こしまで通しで動かした確認は開発環境の
   制約上できていない。エラーが出たら教えてほしい。
-- **動画プレビューは静止フレームのみ**: リアルタイム再生・音声再生はできず、
-  スクラブ位置の1フレームを都度ffmpegで抜き出して表示するだけ。
+- **動画プレビューは静止フレームのみ**: リアルタイム再生はできず、スクラブ
+  位置の1フレームを都度ffmpegで抜き出して表示するだけ。音声は各セグメントの
+  「▶」で区間ごとに再生できるが、動画をシームレスに再生しながら音声を聴く
+  ことはできない。
 - **セグメントの分割・結合はできない**: 1行の削除はできるが、2行を1つに
   まとめたり、1行を2つに分割したりする機能はまだない。
 - **手動モードのXML書き出しは「動画1本＋マーカー」形式**: DaVinci Resolveの

@@ -26,10 +26,14 @@ from PIL import Image
 from davinci_auto_cut.ffprobe import probe_dimensions, probe_duration, probe_fps
 from silence_cut_app import theme
 
-from create_text_app import frame_extract, manual_transcribe, transcribe_engine
+from create_text_app import audio_playback, frame_extract, manual_transcribe, transcribe_engine
+from create_text_app.audio_playback import AudioPlaybackError
 from create_text_app.fcp7_markers import write_marker_xml
+from create_text_app.manual_project import load_project, save_project
 from create_text_app.mic_recorder import MicRecorder, MicRecorderError
 from create_text_app.subtitles import Segment, build_srt, build_txt, build_vtt
+
+PROJECT_FILETYPES = [("Create Textプロジェクト", "*.json"), ("すべてのファイル", "*.*")]
 
 MEDIA_FILETYPES = [
     ("動画・音声ファイル", "*.mp4 *.mov *.mxf *.avi *.mts *.m4v *.wav *.mp3 *.m4a *.aac *.flac"),
@@ -164,6 +168,7 @@ class CreateTextApp:
         self._wav_counter = 0
 
         self._build_widgets()
+        self._bind_manual_shortcuts()
         self.root.after(100, self._poll_log_queue)
 
     # -- top-level layout ---------------------------------------------------
@@ -433,6 +438,15 @@ class CreateTextApp:
             side="left", padx=(10, 0)
         )
 
+        project_row = ctk.CTkFrame(top_inner, fg_color="transparent")
+        project_row.pack(fill="x", pady=(0, 8))
+        _button(project_row, primary=False, text="プロジェクトを開く", command=self._manual_open_project).pack(
+            side="left", fill="x", expand=True, padx=(0, 6)
+        )
+        _button(project_row, primary=False, text="プロジェクトを保存", command=self._manual_save_project).pack(
+            side="left", fill="x", expand=True, padx=(6, 0)
+        )
+
         settings_row = ctk.CTkFrame(top_inner, fg_color="transparent")
         settings_row.pack(fill="x")
         lang_col = ctk.CTkFrame(settings_row, fg_color="transparent")
@@ -492,6 +506,13 @@ class CreateTextApp:
             side="left", fill="x", expand=True
         )
         self._segment_add_button = io_row.winfo_children()[-1]
+
+        ctk.CTkLabel(
+            preview_inner,
+            text="ショートカット: I=IN設定　O=OUT設定　Enter=セグメント追加　"
+                 "R=最後のセグメントを録音　Space=最後のセグメントを再生",
+            text_color=theme.TEXT_MUTED, font=ctk.CTkFont(family=theme.FONT_FAMILY, size=11),
+        ).pack(anchor="w", pady=(6, 0))
 
         # -- segment list --
         # A plain frame, not another CTkScrollableFrame -- the whole mode is
@@ -561,6 +582,65 @@ class CreateTextApp:
         self._refresh_manual_rows()
         self._append_log(f"動画を読み込みました: {os.path.basename(path)}（{duration:.1f}秒）", tag="success")
 
+    # -- project save/load ---------------------------------------------------
+
+    def _manual_save_project(self):
+        self._sync_manual_segments_from_entries()
+        if not self.manual_video_path:
+            messagebox.showerror("エラー", "動画が読み込まれていません。")
+            return
+
+        path = filedialog.asksaveasfilename(
+            title="プロジェクトの保存先", defaultextension=".json", filetypes=PROJECT_FILETYPES
+        )
+        if not path:
+            return
+
+        save_project(
+            path, self.manual_video_path, self.manual_fps, self.manual_duration,
+            self.manual_dimensions, self.manual_segments,
+        )
+        self._append_log(f"プロジェクトを保存しました: {path}", tag="success")
+
+    def _manual_open_project(self):
+        path = filedialog.askopenfilename(title="プロジェクトを開く", filetypes=PROJECT_FILETYPES)
+        if not path:
+            return
+
+        try:
+            data = load_project(path)
+        except Exception as exc:  # noqa: BLE001
+            messagebox.showerror("エラー", f"プロジェクトの読み込みに失敗しました:\n{exc}")
+            return
+
+        self.manual_video_path = data["video_path"]
+        self.manual_fps = data["fps"]
+        self.manual_duration = data["duration"]
+        self.manual_dimensions = data["dimensions"]
+        self.manual_segments = data["segments"]
+        self._pending_in = None
+        self._pending_out = None
+        self._update_io_labels()
+
+        self.manual_file_entry.configure(state="normal")
+        self.manual_file_entry.delete(0, "end")
+        self.manual_file_entry.insert(0, self.manual_video_path or "")
+        self.manual_file_entry.configure(state="disabled")
+
+        if self.manual_video_path and os.path.isfile(self.manual_video_path):
+            self.scrub_slider.configure(from_=0, to=max(self.manual_duration, 0.1))
+            self.scrub_slider.set(0)
+            self._update_preview_frame(0.0)
+            self._append_log(f"プロジェクトを読み込みました: {os.path.basename(path)}", tag="success")
+        else:
+            self._append_log(
+                f"プロジェクトを読み込みましたが、動画ファイルが見つかりません: {self.manual_video_path}\n"
+                "「参照...」でファイルを選び直してください。",
+                tag="warning",
+            )
+
+        self._refresh_manual_rows()
+
     def _on_scrub(self, value):
         if self._scrub_after_id is not None:
             self.root.after_cancel(self._scrub_after_id)
@@ -618,6 +698,37 @@ class CreateTextApp:
         self._update_io_labels()
         self._refresh_manual_rows()
 
+    # -- keyboard shortcuts -----------------------------------------------------
+
+    _TEXT_INPUT_WIDGET_CLASSES = ("Entry", "TEntry", "Text")
+
+    def _bind_manual_shortcuts(self):
+        self.root.bind("<Key>", self._on_manual_key)
+
+    def _on_manual_key(self, event):
+        if self.mode != MODE_MANUAL:
+            return
+
+        # Don't hijack keystrokes while the user is typing into a field --
+        # only act when focus is on something that isn't a text entry.
+        focused = self.root.focus_get()
+        if focused is not None and focused.winfo_class() in self._TEXT_INPUT_WIDGET_CLASSES:
+            return
+
+        key = event.keysym.lower()
+        if key == "i":
+            self._set_in()
+        elif key == "o":
+            self._set_out()
+        elif key == "return":
+            self._add_manual_segment()
+        elif key == "r":
+            if self.manual_segments:
+                self._toggle_record(self.manual_segments[-1])
+        elif key == "space":
+            if self.manual_segments:
+                self._play_segment(self.manual_segments[-1])
+
     # -- segment rows ---------------------------------------------------------
 
     def _refresh_manual_rows(self):
@@ -660,12 +771,12 @@ class CreateTextApp:
             )
             record_button.pack(side="left", padx=(0, 4))
 
-            jump_button = _button(
+            play_button = _button(
                 row, primary=False, text="▶", width=32, height=28,
                 font=ctk.CTkFont(family=theme.FONT_FAMILY, size=13),
-                command=lambda s=seg: self._jump_to_segment(s),
+                command=lambda s=seg: self._play_segment(s),
             )
-            jump_button.pack(side="left", padx=(0, 4))
+            play_button.pack(side="left", padx=(0, 4))
 
             delete_button = _button(
                 row, primary=False, text="✕", width=32, height=28,
@@ -702,9 +813,40 @@ class CreateTextApp:
             except ValueError:
                 pass  # leave the previous value -- don't blow up on a bad edit mid-typing
 
-    def _jump_to_segment(self, segment: Segment):
+    def _play_segment(self, segment: Segment):
+        """Jump the preview to this segment's start and play its real audio
+        -- the silent scrub preview alone isn't enough to judge whether an
+        IN/OUT point actually lands where the speech does.
+        """
+
         self.scrub_slider.set(segment.start)
         self._update_preview_frame(segment.start)
+
+        if not self.manual_video_path:
+            return
+        duration = segment.end - segment.start
+        if duration <= 0:
+            return
+
+        try:
+            from davinci_auto_cut.audio_extract import extract_audio_segment
+
+            wav_path = extract_audio_segment(
+                self.manual_video_path, segment.start, duration, sample_rate=44100, temp_dir=self._temp_dir,
+            )
+        except Exception as exc:  # noqa: BLE001
+            self._append_log(f"音声の抽出に失敗しました: {exc}", tag="warning")
+            return
+
+        try:
+            audio_playback.play_wav(wav_path)
+        except AudioPlaybackError as exc:
+            self._append_log(str(exc), tag="warning")
+        finally:
+            try:
+                os.remove(wav_path)
+            except OSError:
+                pass
 
     def _delete_manual_segment(self, segment: Segment):
         if self._recording_segment is not None:
