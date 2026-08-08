@@ -2,6 +2,7 @@
 list of transcript segments. No Whisper dependency -- easy to unit test.
 """
 
+import re
 from dataclasses import dataclass
 from typing import List
 
@@ -65,3 +66,47 @@ def build_txt(segments: List[Segment]) -> str:
 
     kept = _non_empty(segments)
     return "\n".join(seg.text for seg in kept) + ("\n" if kept else "")
+
+
+_SRT_TIME_RE = re.compile(
+    r"(\d{1,2}):(\d{2}):(\d{2})[,.](\d{1,3})\s*-->\s*(\d{1,2}):(\d{2}):(\d{2})[,.](\d{1,3})"
+)
+
+
+def _srt_timestamp_to_seconds(hh: str, mm: str, ss: str, ms: str) -> float:
+    return int(hh) * 3600 + int(mm) * 60 + int(ss) + int(ms) / 1000.0
+
+
+def parse_srt(text: str) -> List[Segment]:
+    """Parse SRT-formatted text into a list of ``Segment``, for loading an
+    existing subtitle file into manual mode to continue editing/re-dictating.
+
+    Lenient: the leading cue-index line is optional (only the timestamp line
+    is actually required to identify a block), blank lines separate cues,
+    and both ``,`` and ``.`` are accepted before milliseconds. Multi-line
+    cue text is joined with spaces -- segments here are edited in a
+    single-line field, so a literal newline wouldn't display usefully.
+    """
+
+    segments: List[Segment] = []
+    for block in re.split(r"\r?\n\s*\r?\n", text.strip()):
+        lines = [line for line in block.splitlines() if line.strip()]
+        if not lines:
+            continue
+
+        match = None
+        time_line_index = None
+        for i, line in enumerate(lines):
+            match = _SRT_TIME_RE.search(line)
+            if match:
+                time_line_index = i
+                break
+        if match is None:
+            continue
+
+        start = _srt_timestamp_to_seconds(*match.groups()[0:4])
+        end = _srt_timestamp_to_seconds(*match.groups()[4:8])
+        cue_text = " ".join(lines[time_line_index + 1 :]).strip()
+        segments.append(Segment(start=start, end=end, text=cue_text))
+
+    return segments

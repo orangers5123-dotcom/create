@@ -17,6 +17,7 @@ import os
 import queue
 import tempfile
 import threading
+import tkinter as tk
 import traceback
 from tkinter import filedialog, messagebox
 
@@ -25,15 +26,19 @@ from PIL import Image
 
 from davinci_auto_cut.ffprobe import probe_dimensions, probe_duration, probe_fps
 from silence_cut_app import theme
+from silence_cut_app.intensity import INTENSITY_PRESETS, Intensity
 
 from create_text_app import audio_playback, frame_extract, manual_transcribe, transcribe_engine
 from create_text_app.audio_playback import AudioPlaybackError
 from create_text_app.fcp7_markers import write_marker_xml
 from create_text_app.manual_project import load_project, save_project
 from create_text_app.mic_recorder import MicRecorder, MicRecorderError
-from create_text_app.subtitles import Segment, build_srt, build_txt, build_vtt
+from create_text_app.subtitles import Segment, build_srt, build_txt, build_vtt, parse_srt
 
 PROJECT_FILETYPES = [("Create Textプロジェクト", "*.json"), ("すべてのファイル", "*.*")]
+
+INTENSITY_LABELS = {member: INTENSITY_PRESETS[member].label for member in Intensity}
+LABEL_TO_INTENSITY = {label: member for member, label in INTENSITY_LABELS.items()}
 
 MEDIA_FILETYPES = [
     ("動画・音声ファイル", "*.mp4 *.mov *.mxf *.avi *.mts *.m4v *.wav *.mp3 *.m4a *.aac *.flac"),
@@ -157,12 +162,14 @@ class CreateTextApp:
         self.manual_dimensions = (1920, 1080)
         self.manual_language_label = "自動検出"
         self.manual_model_size = "small"
+        self.manual_intensity_label = INTENSITY_LABELS[Intensity.STANDARD]
         self.manual_segments: list[Segment] = []
         self._manual_rows: list[dict] = []  # per-row widgets, aligned with manual_segments
         self._pending_in = None
         self._pending_out = None
         self._scrub_after_id = None
         self._preview_ctk_image = None
+        self._waveform_peaks: list[float] = []
         self._mic_recorder = MicRecorder()
         self._recording_segment = None  # the Segment currently being dictated, or None
         self._wav_counter = 0
@@ -338,6 +345,14 @@ class CreateTextApp:
 
     def _delete_segment(self, index: int):
         self._sync_segments_from_entries()
+        preview = self.segments[index].text.strip()
+        if preview:
+            preview = preview if len(preview) <= 40 else preview[:39] + "…"
+            message = f"このセグメントを削除しますか？\n「{preview}」"
+        else:
+            message = "このセグメントを削除しますか？"
+        if not messagebox.askyesno("削除の確認", message):
+            return
         del self.segments[index]
         self._refresh_segment_rows()
 
@@ -441,10 +456,13 @@ class CreateTextApp:
         project_row = ctk.CTkFrame(top_inner, fg_color="transparent")
         project_row.pack(fill="x", pady=(0, 8))
         _button(project_row, primary=False, text="プロジェクトを開く", command=self._manual_open_project).pack(
-            side="left", fill="x", expand=True, padx=(0, 6)
+            side="left", fill="x", expand=True, padx=(0, 4)
         )
         _button(project_row, primary=False, text="プロジェクトを保存", command=self._manual_save_project).pack(
-            side="left", fill="x", expand=True, padx=(6, 0)
+            side="left", fill="x", expand=True, padx=4
+        )
+        _button(project_row, primary=False, text="SRTを読み込む", command=self._manual_import_srt).pack(
+            side="left", fill="x", expand=True, padx=(4, 0)
         )
 
         settings_row = ctk.CTkFrame(top_inner, fg_color="transparent")
@@ -467,6 +485,21 @@ class CreateTextApp:
         self.manual_model_selector.set(self.manual_model_size)
         self.manual_model_selector.pack(fill="x")
 
+        _section_label(top_inner, "無音検出でセグメントを自動生成（既存のセグメントは置き換わります）").pack(
+            anchor="w", pady=(10, 4)
+        )
+        auto_detect_row = ctk.CTkFrame(top_inner, fg_color="transparent")
+        auto_detect_row.pack(fill="x")
+        self.manual_intensity_selector = _segmented(
+            auto_detect_row, [INTENSITY_LABELS[m] for m in Intensity], command=self._on_manual_intensity_changed
+        )
+        self.manual_intensity_selector.set(self.manual_intensity_label)
+        self.manual_intensity_selector.pack(side="left", fill="x", expand=True, padx=(0, 8))
+        self._auto_detect_button = _button(
+            auto_detect_row, primary=False, text="セグメント自動生成", command=self._auto_detect_segments
+        )
+        self._auto_detect_button.pack(side="left")
+
         # -- preview --
         preview_panel = _panel(parent)
         preview_panel.pack(fill="x", **pad)
@@ -485,6 +518,13 @@ class CreateTextApp:
             font=ctk.CTkFont(family="Menlo", size=12),
         )
         self.time_label.pack(pady=(8, 4))
+
+        # Waveform strip, drawn once per loaded video -- helps line up
+        # IN/OUT against speech/silence boundaries visually instead of only
+        # by blind scrubbing or listening back afterward.
+        self.waveform_canvas = tk.Canvas(preview_inner, height=50, bg=theme.BG_FIELD, highlightthickness=0)
+        self.waveform_canvas.pack(fill="x", pady=(0, 4))
+        self.waveform_canvas.bind("<Configure>", lambda e: self._draw_waveform())
 
         self.scrub_slider = ctk.CTkSlider(
             preview_inner, from_=0, to=1, number_of_steps=1000,
@@ -547,6 +587,45 @@ class CreateTextApp:
     def _on_manual_model_changed(self, value):
         self.manual_model_size = value
 
+    def _on_manual_intensity_changed(self, value):
+        self.manual_intensity_label = value
+
+    # -- auto-detect segments from silence -----------------------------------
+
+    def _auto_detect_segments(self):
+        if not self.manual_video_path:
+            messagebox.showerror("エラー", "動画が読み込まれていません。")
+            return
+        if self._recording_segment is not None:
+            return
+        if self.manual_segments:
+            if not messagebox.askyesno("確認", "既存のセグメントを無音検出の結果で置き換えますか？"):
+                return
+
+        self._auto_detect_button.configure(state="disabled")
+        params = {
+            "video_path": self.manual_video_path,
+            "duration": self.manual_duration,
+            "intensity": LABEL_TO_INTENSITY[self.manual_intensity_label].value,
+        }
+        threading.Thread(target=self._run_auto_detect_job, args=(params,), daemon=True).start()
+
+    def _run_auto_detect_job(self, params: dict):
+        def progress_cb(message: str):
+            self._log_queue.put(("log", message))
+
+        try:
+            from silence_cut_app import cut_engine
+
+            progress_cb("無音を検出中...")
+            keep_segments = cut_engine.detect_keep_segments(
+                params["video_path"], 0.0, params["duration"], params["intensity"], temp_dir=self._temp_dir,
+            )
+            segments = [Segment(start=start, end=end, text="") for start, end in keep_segments]
+            self._log_queue.put(("auto_detect_done", segments))
+        except Exception as exc:  # noqa: BLE001
+            self._log_queue.put(("auto_detect_error", f"{exc}\n{traceback.format_exc()}"))
+
     # -- video load / preview -----------------------------------------------
 
     def _manual_browse_video(self):
@@ -580,6 +659,7 @@ class CreateTextApp:
         self.scrub_slider.set(0)
         self._update_preview_frame(0.0)
         self._refresh_manual_rows()
+        self._start_waveform_job(path, duration)
         self._append_log(f"動画を読み込みました: {os.path.basename(path)}（{duration:.1f}秒）", tag="success")
 
     # -- project save/load ---------------------------------------------------
@@ -631,6 +711,7 @@ class CreateTextApp:
             self.scrub_slider.configure(from_=0, to=max(self.manual_duration, 0.1))
             self.scrub_slider.set(0)
             self._update_preview_frame(0.0)
+            self._start_waveform_job(self.manual_video_path, self.manual_duration)
             self._append_log(f"プロジェクトを読み込みました: {os.path.basename(path)}", tag="success")
         else:
             self._append_log(
@@ -640,6 +721,75 @@ class CreateTextApp:
             )
 
         self._refresh_manual_rows()
+
+    def _manual_import_srt(self):
+        path = filedialog.askopenfilename(
+            title="SRTを読み込む", filetypes=[("SRTファイル", "*.srt"), ("すべてのファイル", "*.*")]
+        )
+        if not path:
+            return
+
+        try:
+            with open(path, encoding="utf-8") as f:
+                text = f.read()
+            segments = parse_srt(text)
+        except Exception as exc:  # noqa: BLE001
+            messagebox.showerror("エラー", f"SRTの読み込みに失敗しました:\n{exc}")
+            return
+
+        if not segments:
+            messagebox.showerror("エラー", "SRTから有効なセグメントを読み取れませんでした。")
+            return
+
+        if self.manual_segments:
+            if not messagebox.askyesno("確認", "既存のセグメントをSRTの内容で置き換えますか？"):
+                return
+
+        self.manual_segments = segments
+        self._pending_in = None
+        self._pending_out = None
+        self._update_io_labels()
+        self._refresh_manual_rows()
+        self._append_log(
+            f"SRTを読み込みました: {os.path.basename(path)}（{len(segments)}個のセグメント）", tag="success"
+        )
+
+    # -- waveform -------------------------------------------------------------
+
+    def _start_waveform_job(self, video_path: str, duration: float):
+        self._waveform_peaks = []
+        self.waveform_canvas.delete("all")
+        threading.Thread(target=self._run_waveform_job, args=(video_path, duration), daemon=True).start()
+
+    def _run_waveform_job(self, video_path: str, duration: float):
+        try:
+            from create_text_app.waveform import extract_waveform_peaks
+
+            peaks = extract_waveform_peaks(video_path, duration, num_points=400, temp_dir=self._temp_dir)
+            self._log_queue.put(("waveform_done", peaks))
+        except Exception as exc:  # noqa: BLE001
+            self._log_queue.put(("waveform_error", str(exc)))
+
+    def _draw_waveform(self):
+        canvas = self.waveform_canvas
+        canvas.delete("all")
+        peaks = self._waveform_peaks
+        if not peaks:
+            return
+
+        width = canvas.winfo_width()
+        height = canvas.winfo_height()
+        if width <= 1 or height <= 1:
+            return
+
+        n = len(peaks)
+        bar_width = max(width / n, 1.0)
+        mid = height / 2
+
+        for i, peak in enumerate(peaks):
+            x = i * bar_width
+            h = max(peak * (height / 2 - 2), 1.0)
+            canvas.create_line(x, mid - h, x, mid + h, fill=theme.ACCENT, width=max(bar_width, 1.0))
 
     def _on_scrub(self, value):
         if self._scrub_after_id is not None:
@@ -746,7 +896,8 @@ class CreateTextApp:
 
         recording_active = self._recording_segment is not None
 
-        for seg in self.manual_segments:
+        for i, seg in enumerate(self.manual_segments):
+            has_next = i < len(self.manual_segments) - 1
             row = ctk.CTkFrame(self.manual_segment_list, fg_color="transparent")
             row.pack(fill="x", pady=2, padx=2)
 
@@ -778,6 +929,22 @@ class CreateTextApp:
             )
             play_button.pack(side="left", padx=(0, 4))
 
+            split_button = _button(
+                row, primary=False, text="✂", width=32, height=28,
+                font=ctk.CTkFont(family=theme.FONT_FAMILY, size=13),
+                command=lambda s=seg: self._split_segment(s),
+            )
+            split_button.pack(side="left", padx=(0, 4))
+
+            merge_button = _button(
+                row, primary=False, text="🔗", width=32, height=28,
+                font=ctk.CTkFont(family=theme.FONT_FAMILY, size=13),
+                command=lambda s=seg: self._merge_with_next(s),
+            )
+            merge_button.pack(side="left", padx=(0, 4))
+            if not has_next:
+                merge_button.configure(state="disabled")
+
             delete_button = _button(
                 row, primary=False, text="✕", width=32, height=28,
                 font=ctk.CTkFont(family=theme.FONT_FAMILY, size=13),
@@ -790,6 +957,8 @@ class CreateTextApp:
             if recording_active and seg is not self._recording_segment:
                 record_button.configure(state="disabled")
                 delete_button.configure(state="disabled")
+                split_button.configure(state="disabled")
+                merge_button.configure(state="disabled")
 
             self._manual_rows.append(
                 {
@@ -848,10 +1017,73 @@ class CreateTextApp:
             except OSError:
                 pass
 
+    def _split_segment(self, segment: Segment):
+        """Split ``segment`` in two at the current preview position -- the
+        first half keeps the original text, the second half starts blank
+        (there's no reliable way to guess where in the text the split
+        should fall, so it's left for the user to re-dictate/re-type)."""
+
+        if self._recording_segment is not None:
+            return
+        self._sync_manual_segments_from_entries()
+
+        split_time = self._current_scrub_time()
+        if not (segment.start + 0.05 < split_time < segment.end - 0.05):
+            messagebox.showerror(
+                "エラー",
+                "分割位置がこのセグメントの範囲内にありません。\n"
+                "プレビューをセグメント内の分割したい位置に移動してから分割してください。",
+            )
+            return
+
+        index = next(i for i, s in enumerate(self.manual_segments) if s is segment)
+        first = Segment(start=segment.start, end=split_time, text=segment.text)
+        second = Segment(start=split_time, end=segment.end, text="")
+        self.manual_segments[index : index + 1] = [first, second]
+        self._refresh_manual_rows()
+        self._append_log(
+            f"セグメントを分割しました: {_fmt_timecode(first.start)}–{_fmt_timecode(first.end)} / "
+            f"{_fmt_timecode(second.start)}–{_fmt_timecode(second.end)}",
+            tag="success",
+        )
+
+    def _merge_with_next(self, segment: Segment):
+        """Merge ``segment`` with the next one in timeline order into one,
+        concatenating their text."""
+
+        if self._recording_segment is not None:
+            return
+        self._sync_manual_segments_from_entries()
+
+        index = next(i for i, s in enumerate(self.manual_segments) if s is segment)
+        if index + 1 >= len(self.manual_segments):
+            messagebox.showerror("エラー", "次のセグメントがないため結合できません。")
+            return
+
+        next_segment = self.manual_segments[index + 1]
+        merged_text = " ".join(t for t in (segment.text.strip(), next_segment.text.strip()) if t)
+        merged = Segment(start=segment.start, end=next_segment.end, text=merged_text)
+        self.manual_segments[index : index + 2] = [merged]
+        self._refresh_manual_rows()
+        self._append_log(
+            f"セグメントを結合しました: {_fmt_timecode(merged.start)}–{_fmt_timecode(merged.end)}", tag="success"
+        )
+
     def _delete_manual_segment(self, segment: Segment):
         if self._recording_segment is not None:
             return
         self._sync_manual_segments_from_entries()
+
+        timecode = f"{_fmt_timecode(segment.start)}–{_fmt_timecode(segment.end)}"
+        preview = segment.text.strip()
+        if preview:
+            preview = preview if len(preview) <= 40 else preview[:39] + "…"
+            message = f"このセグメントを削除しますか？\n{timecode}「{preview}」"
+        else:
+            message = f"このセグメントを削除しますか？\n{timecode}"
+        if not messagebox.askyesno("削除の確認", message):
+            return
+
         self.manual_segments = [s for s in self.manual_segments if s is not segment]
         self._refresh_manual_rows()
 
@@ -989,6 +1221,19 @@ class CreateTextApp:
                     self._append_log(f"認識結果: {text}", tag="success")
                 elif kind == "manual_error":
                     self._append_log(f"[エラー]\n{payload}", tag="error")
+                elif kind == "auto_detect_done":
+                    self.manual_segments = payload
+                    self._refresh_manual_rows()
+                    self._append_log(f"完了: {len(self.manual_segments)}個のセグメントを検出しました。", tag="success")
+                    self._auto_detect_button.configure(state="normal")
+                elif kind == "auto_detect_error":
+                    self._append_log(f"[エラー]\n{payload}", tag="error")
+                    self._auto_detect_button.configure(state="normal")
+                elif kind == "waveform_done":
+                    self._waveform_peaks = payload
+                    self._draw_waveform()
+                elif kind == "waveform_error":
+                    self._append_log(f"波形の生成に失敗しました: {payload}", tag="warning")
         except queue.Empty:
             pass
         self.root.after(100, self._poll_log_queue)
