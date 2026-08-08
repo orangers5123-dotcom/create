@@ -23,6 +23,15 @@ faster-whisper>=1.0
 # system install -- the PyPI wheel bundles PortAudio.
 sounddevice>=0.4
 
+# create_text_app manual mode's frame preview + customtkinter's own image
+# widgets both need Pillow. customtkinter pulls it in transitively, but
+# declaring it directly here means `pip install -r requirements.txt` always
+# gets it even if that transitive resolution ever changes -- and PyInstaller
+# needs it actually installed to bundle it (a "ModuleNotFoundError: No
+# module named 'PIL'" in the packaged .app means this wasn't installed when
+# `pyinstaller` ran).
+Pillow>=10.0
+
 # Building a double-clickable macOS .app bundle (see silence_cut_app/README.md
 # and create_text_app/README.md):
 # pyinstaller>=6.0   (recommended)
