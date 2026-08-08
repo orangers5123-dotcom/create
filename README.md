@@ -9,7 +9,10 @@
   のデスクトップGUIアプリ。Resolve不要で、2カメの音声自動同期にも対応。
 - **`create_text_app/`**（[README](create_text_app/README.md)、アプリ名 **Create Text**）:
   ローカルWhisperで動画・音声を文字起こしし、Vrewのようにテキスト一覧を見ながら
-  修正してSRT/TXT/VTTを書き出すスタンドアロンのデスクトップGUIアプリ。
+  修正してSRT/TXT/VTTを書き出すスタンドアロンのデスクトップGUIアプリ。自動文字
+  起こしに加えて、動画プレビューをスクラブしてIN/OUTでセグメントを区切り、
+  マイクに喋って各区間だけ文字起こしする「手動（音声入力）」モードもあり、
+  SRTまたはFCP7 XML（シーケンスマーカー）でDaVinci Resolveに書き出せる。
 
 ## davinci_auto_cut について
 

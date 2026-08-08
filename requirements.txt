@@ -18,6 +18,11 @@ customtkinter>=5.2
 # weights from Hugging Face Hub (needs network once, then works offline).
 faster-whisper>=1.0
 
+# create_text_app manual dictation mode: mic recording for per-segment
+# voice input (PortAudio via sounddevice). On Mac this needs no extra
+# system install -- the PyPI wheel bundles PortAudio.
+sounddevice>=0.4
+
 # Building a double-clickable macOS .app bundle (see silence_cut_app/README.md
 # and create_text_app/README.md):
 # pyinstaller>=6.0   (recommended)
