@@ -17,23 +17,32 @@ import os
 import queue
 import tempfile
 import threading
+import time
 import tkinter as tk
 import traceback
 from tkinter import filedialog, messagebox
 
 import customtkinter as ctk
-from PIL import Image
 
 from davinci_auto_cut.ffprobe import probe_dimensions, probe_duration, probe_fps
 from silence_cut_app import theme
 from silence_cut_app.intensity import INTENSITY_PRESETS, Intensity
 
-from create_text_app import audio_playback, frame_extract, manual_transcribe, transcribe_engine
+from create_text_app import audio_playback, manual_transcribe, transcribe_engine
 from create_text_app.audio_playback import AudioPlaybackError
 from create_text_app.fcp7_markers import write_marker_xml
 from create_text_app.manual_project import load_project, save_project
 from create_text_app.mic_recorder import MicRecorder, MicRecorderError
 from create_text_app.subtitles import Segment, build_srt, build_txt, build_vtt, parse_srt
+from create_text_app.video_player import VideoFrameReader, VideoFrameReaderError
+
+# Visual update rate during real-time playback. Deliberately well below the
+# source video's own frame rate -- reading via a hard seek every tick (see
+# VideoFrameReader) is what keeps the preview correctly in sync with the
+# audio, but that's noticeably slower than sequential decoding for
+# long-GOP-encoded footage, so a high tick rate would just fall behind
+# and stutter. The audio itself plays continuously and isn't affected.
+PLAYBACK_TICK_MS = 100
 
 PROJECT_FILETYPES = [("Create Textプロジェクト", "*.json"), ("すべてのファイル", "*.*")]
 
@@ -173,6 +182,18 @@ class CreateTextApp:
         self._mic_recorder = MicRecorder()
         self._recording_segment = None  # the Segment currently being dictated, or None
         self._wav_counter = 0
+
+        # -- real-time preview playback state --
+        self._video_reader: VideoFrameReader = None
+        self._current_time = 0.0  # single source of truth for the playhead -- kept
+        # in sync by scrubbing, playback, and jump-to-segment alike, so I/O and the
+        # keyboard shortcuts always act on wherever the preview actually is.
+        self._audio_data = None  # full decoded audio (numpy array), loaded once per video
+        self._audio_samplerate = None
+        self._is_playing = False
+        self._playback_after_id = None
+        self._playback_wall_start = None
+        self._playback_video_start = None
 
         self._build_widgets()
         self._bind_manual_shortcuts()
@@ -513,6 +534,12 @@ class CreateTextApp:
         )
         self.preview_label.pack()
 
+        self.play_button = _button(
+            preview_inner, primary=False, text="▶ 再生", width=100,
+            command=self._toggle_playback,
+        )
+        self.play_button.pack(pady=(8, 0))
+
         self.time_label = ctk.CTkLabel(
             preview_inner, text="00:00.0 / 00:00.0", text_color=theme.TEXT_MUTED,
             font=ctk.CTkFont(family="Menlo", size=12),
@@ -549,7 +576,7 @@ class CreateTextApp:
 
         ctk.CTkLabel(
             preview_inner,
-            text="ショートカット: I=IN設定　O=OUT設定　Enter=セグメント追加　"
+            text="ショートカット: P=動画の再生/一時停止　I=IN設定　O=OUT設定　Enter=セグメント追加　"
                  "R=最後のセグメントを録音　Space=最後のセグメントを再生",
             text_color=theme.TEXT_MUTED, font=ctk.CTkFont(family=theme.FONT_FAMILY, size=11),
         ).pack(anchor="w", pady=(6, 0))
@@ -657,10 +684,30 @@ class CreateTextApp:
 
         self.scrub_slider.configure(from_=0, to=max(duration, 0.1))
         self.scrub_slider.set(0)
+        self._load_video_for_preview(path)
         self._update_preview_frame(0.0)
         self._refresh_manual_rows()
         self._start_waveform_job(path, duration)
+        self._start_audio_load_job(path, duration)
         self._append_log(f"動画を読み込みました: {os.path.basename(path)}（{duration:.1f}秒）", tag="success")
+
+    def _load_video_for_preview(self, path: str):
+        """(Re)open the fast frame reader used for both scrubbing and
+        real-time playback. Called whenever a new video becomes the loaded
+        one, so an old video's reader/audio don't linger."""
+
+        self._stop_playback()
+        if self._video_reader is not None:
+            self._video_reader.close()
+            self._video_reader = None
+        self._current_time = 0.0
+        self._audio_data = None
+        self._audio_samplerate = None
+
+        try:
+            self._video_reader = VideoFrameReader(path)
+        except VideoFrameReaderError as exc:
+            self._append_log(f"動画プレビューの初期化に失敗しました: {exc}", tag="warning")
 
     # -- project save/load ---------------------------------------------------
 
@@ -710,8 +757,10 @@ class CreateTextApp:
         if self.manual_video_path and os.path.isfile(self.manual_video_path):
             self.scrub_slider.configure(from_=0, to=max(self.manual_duration, 0.1))
             self.scrub_slider.set(0)
+            self._load_video_for_preview(self.manual_video_path)
             self._update_preview_frame(0.0)
             self._start_waveform_job(self.manual_video_path, self.manual_duration)
+            self._start_audio_load_job(self.manual_video_path, self.manual_duration)
             self._append_log(f"プロジェクトを読み込みました: {os.path.basename(path)}", tag="success")
         else:
             self._append_log(
@@ -792,23 +841,26 @@ class CreateTextApp:
             canvas.create_line(x, mid - h, x, mid + h, fill=theme.ACCENT, width=max(bar_width, 1.0))
 
     def _on_scrub(self, value):
+        if self._is_playing:
+            self._stop_playback()
         if self._scrub_after_id is not None:
             self.root.after_cancel(self._scrub_after_id)
         self._scrub_after_id = self.root.after(120, lambda: self._apply_scrub(float(value)))
 
     def _apply_scrub(self, value: float):
         self._scrub_after_id = None
+        self._current_time = value
         self._update_preview_frame(value)
 
     def _update_preview_frame(self, time_sec: float):
         self.time_label.configure(text=f"{_fmt_timecode(time_sec)} / {_fmt_timecode(self.manual_duration)}")
-        if not self.manual_video_path:
+        if self._video_reader is None:
             return
 
         try:
-            frame_path = os.path.join(self._temp_dir, "preview.png")
-            frame_extract.extract_frame(self.manual_video_path, time_sec, out_path=frame_path)
-            img = Image.open(frame_path)
+            img = self._video_reader.read_frame_at(time_sec)
+            if img is None:
+                return
             img.thumbnail((PREVIEW_W, PREVIEW_H))
             ctk_image = ctk.CTkImage(light_image=img, dark_image=img, size=img.size)
             self._preview_ctk_image = ctk_image  # keep a reference -- CTkImage isn't retained by the widget
@@ -817,7 +869,96 @@ class CreateTextApp:
             self._append_log(f"プレビューの取得に失敗しました: {exc}", tag="warning")
 
     def _current_scrub_time(self) -> float:
-        return float(self.scrub_slider.get())
+        """The playhead's current position -- kept in sync by scrubbing,
+        real-time playback, and jump-to-segment alike, so IN/OUT (mouse or
+        keyboard) always act on wherever the preview actually is, playing
+        or not."""
+
+        return self._current_time
+
+    # -- real-time playback -----------------------------------------------------
+
+    def _start_audio_load_job(self, video_path: str, duration: float):
+        threading.Thread(target=self._run_audio_load_job, args=(video_path, duration), daemon=True).start()
+
+    def _run_audio_load_job(self, video_path: str, duration: float):
+        try:
+            from davinci_auto_cut.audio_extract import extract_audio_segment
+            from scipy.io import wavfile
+
+            wav_path = extract_audio_segment(video_path, 0.0, duration, sample_rate=44100, temp_dir=self._temp_dir)
+            try:
+                samplerate, data = wavfile.read(wav_path)
+            finally:
+                os.remove(wav_path)
+            self._log_queue.put(("audio_load_done", (video_path, samplerate, data)))
+        except Exception as exc:  # noqa: BLE001
+            self._log_queue.put(("audio_load_error", str(exc)))
+
+    def _toggle_playback(self):
+        if self._is_playing:
+            self._stop_playback()
+        else:
+            self._start_playback()
+
+    def _start_playback(self):
+        if self._video_reader is None:
+            return
+        if self._audio_data is None:
+            self._append_log("音声を読み込み中です。少し待ってからもう一度お試しください。", tag="warning")
+            return
+
+        if self._current_time >= self.manual_duration:
+            self._current_time = 0.0
+
+        try:
+            import sounddevice as sd
+
+            start_sample = max(0, int(self._current_time * self._audio_samplerate))
+            sd.play(self._audio_data[start_sample:], self._audio_samplerate)
+        except Exception as exc:  # noqa: BLE001
+            self._append_log(f"音声の再生に失敗しました: {exc}", tag="warning")
+            return
+
+        self._is_playing = True
+        self._playback_wall_start = time.monotonic()
+        self._playback_video_start = self._current_time
+        self.play_button.configure(text="⏸ 一時停止")
+        self._playback_tick()
+
+    def _stop_playback(self):
+        was_playing = self._is_playing
+        self._is_playing = False
+        if self._playback_after_id is not None:
+            self.root.after_cancel(self._playback_after_id)
+            self._playback_after_id = None
+        if was_playing:
+            try:
+                import sounddevice as sd
+
+                sd.stop()
+            except Exception:  # noqa: BLE001 -- best-effort; nothing to fall back to
+                pass
+        self.play_button.configure(text="▶ 再生")
+
+    def _playback_tick(self):
+        if not self._is_playing:
+            return
+
+        elapsed = time.monotonic() - self._playback_wall_start
+        current = self._playback_video_start + elapsed
+
+        if current >= self.manual_duration:
+            self._current_time = self.manual_duration
+            self.scrub_slider.set(self._current_time)
+            self._update_preview_frame(self._current_time)
+            self._stop_playback()
+            return
+
+        self._current_time = current
+        self.scrub_slider.set(current)
+        self._update_preview_frame(current)
+        self._playback_after_id = self.root.after(PLAYBACK_TICK_MS, self._playback_tick)
 
     def _set_in(self):
         self._pending_in = self._current_scrub_time()
@@ -878,6 +1019,8 @@ class CreateTextApp:
         elif key == "space":
             if self.manual_segments:
                 self._play_segment(self.manual_segments[-1])
+        elif key == "p":
+            self._toggle_playback()
 
     # -- segment rows ---------------------------------------------------------
 
@@ -988,6 +1131,8 @@ class CreateTextApp:
         IN/OUT point actually lands where the speech does.
         """
 
+        self._stop_playback()  # don't overlap with the main preview's own playback
+        self._current_time = segment.start
         self.scrub_slider.set(segment.start)
         self._update_preview_frame(segment.start)
 
@@ -1097,6 +1242,7 @@ class CreateTextApp:
         # else: a different row is already recording -- its button is disabled, ignore.
 
     def _start_record(self, segment: Segment):
+        self._stop_playback()  # avoid the video's own audio bleeding into the mic recording
         try:
             self._mic_recorder.start()
         except MicRecorderError as exc:
@@ -1234,6 +1380,13 @@ class CreateTextApp:
                     self._draw_waveform()
                 elif kind == "waveform_error":
                     self._append_log(f"波形の生成に失敗しました: {payload}", tag="warning")
+                elif kind == "audio_load_done":
+                    video_path, samplerate, data = payload
+                    if video_path == self.manual_video_path:  # ignore a stale job from an already-replaced video
+                        self._audio_samplerate = samplerate
+                        self._audio_data = data
+                elif kind == "audio_load_error":
+                    self._append_log(f"音声の読み込みに失敗しました: {payload}", tag="warning")
         except queue.Empty:
             pass
         self.root.after(100, self._poll_log_queue)
