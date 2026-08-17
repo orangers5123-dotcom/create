@@ -32,6 +32,13 @@ sounddevice>=0.4
 # `pyinstaller` ran).
 Pillow>=10.0
 
+# create_text_app manual mode: real-time video playback (not just scrub
+# frames) needs fast, repeated frame reads -- an ffmpeg subprocess per
+# frame is far too slow for ~25-30 reads/second. opencv-python-headless
+# (no GUI/Qt bindings needed, we draw frames ourselves) keeps one decoder
+# open and seeks/reads directly.
+opencv-python-headless>=4.8
+
 # Building a double-clickable macOS .app bundle (see silence_cut_app/README.md
 # and create_text_app/README.md):
 # pyinstaller>=6.0   (recommended)
