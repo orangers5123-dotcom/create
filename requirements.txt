@@ -44,5 +44,9 @@ opencv-python-headless>=4.8
 # pyinstaller>=6.0   (recommended)
 # py2app>=0.28       (has known RecursionError issues with newer Python + numpy/scipy)
 
+# davinci_mcp (MCP server that lets Claude Code drive DaVinci Resolve --
+# see davinci_mcp/README.md). Needs Python >= 3.10.
+mcp>=1.2
+
 # Running the test suite:
 pytest>=7.0

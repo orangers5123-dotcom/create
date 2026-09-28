@@ -1,6 +1,6 @@
 # davinci-auto-cut
 
-このリポジトリには3つのツールがあります。
+このリポジトリには3つのツールと、Claude Code連携用のMCPサーバーがあります。
 
 - **`davinci_auto_cut/`**（このREADMEで説明）: DaVinci Resolveのプロジェクトを
   Scripting API経由で直接編集するツール。Resolveの起動が必須。
@@ -13,6 +13,9 @@
   起こしに加えて、動画プレビューをスクラブしてIN/OUTでセグメントを区切り、
   マイクに喋って各区間だけ文字起こしする「手動（音声入力）」モードもあり、
   SRTまたはFCP7 XML（シーケンスマーカー）でDaVinci Resolveに書き出せる。
+- **`davinci_mcp/`**（[README](davinci_mcp/README.md)）: Claude CodeからDaVinci
+  Resolveを操作するためのMCPサーバー。「無音をカットして」「3秒にマーカー打って」
+  「YouTube用に書き出して」などを会話で指示できる。
 
 ## davinci_auto_cut について
 

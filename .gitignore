@@ -6,3 +6,6 @@ __pycache__/
 # --add-binary -- these are copies of whatever's installed on the Mac doing
 # the build, not something to commit.
 /vendor/
+
+# Local virtualenv (see davinci_mcp/README.md)
+.venv/
