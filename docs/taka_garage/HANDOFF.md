@@ -10,7 +10,7 @@
 1. アナリティクス分析レポート：
    https://claude.ai/code/artifact/d86409ad-bd8d-465f-9baf-008f5e558674
    （長尺6本＋ショート4本の個別分析、有料プロモーション分析、28日/90日実績、歴代最強動画ケーススタディ、改善提案、1か月企画案、優先アクションリスト）
-2. コンセプト・方針・台本 v5（AWOL Vision Aetherion Max vs AWOL Valerion Max 比較レビュー1本）：
+2. コンセプト・方針・台本 v5.1（AWOL Vision Aetherion Max vs AWOL Valerion Max 比較レビュー1本）：
    https://claude.ai/artifact/8NckK8Bf3rTGf8GYxejMTz
    （Titan Noir Max回の反省と対策、コンセプト、フック設計、チャプター別台本、撮影者・編集者への指示、公開施策、KPI、両ガイドラインの必須事項、冒頭ダイジェスト（起承転）、伏線と回収、撮影者用ショットリスト。公開案11/27）
 
