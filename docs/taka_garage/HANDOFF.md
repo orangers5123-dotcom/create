@@ -10,7 +10,7 @@
 1. アナリティクス分析レポート：
    https://claude.ai/code/artifact/d86409ad-bd8d-465f-9baf-008f5e558674
    （長尺6本＋ショート4本の個別分析、有料プロモーション分析、28日/90日実績、歴代最強動画ケーススタディ、改善提案、1か月企画案、優先アクションリスト）
-2. コンセプト・方針・台本 v7.1（AWOL Valerion Max レビュー＋Aetherion Plus・Maxとの3台比較）：
+2. コンセプト・方針・台本 v7.2（AWOL Valerion Max レビュー＋Aetherion Plus・Maxとの3台比較）：
    https://claude.ai/artifact/8NckK8Bf3rTGf8GYxejMTz
    （Titan Noir Max回の反省と対策、コンセプト、フック設計、チャプター別台本、撮影者・編集者への指示、公開施策、KPI、両ガイドラインの必須事項、冒頭ダイジェスト（起承転）、伏線と回収、撮影者用ショットリスト。公開案11/27）
 
@@ -62,7 +62,7 @@
 
 ## 11/2 時間配分の変更
 - 今回の案件はValerion Max（商品提供）。Aetherion Maxは過去の案件で紹介済み（ガイドラインの2026/2〜3月の日付はその案件のもの）
-- 配分：Valerion 約8分45秒（主役）／Plus 約3分半（ブラインドテスト）／Max 約1分半（比較の基準、前回の動画へ誘導）
+- 配分：Valerion Max（約8分45秒）＞Aetherion Max（約3分）＞Aetherion Plus（約2分）の順。塩梅はたかさんの判断に任せる
 - AWOLに確認：今回の必須事項はValerion（＋Plus）のガイドラインだけでよいか
 
 ## 台本上の仮置き（確定したら差し替え）
