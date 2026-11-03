@@ -21,7 +21,7 @@
 4. ブランド施策「ガレージと言えばたかさん」（11/4 さぬさんMTGのフィードバック用）：
    https://claude.ai/artifact/Dpp6kGMGmjZRqAfRP35F4n （PDF：docs/taka_garage/ガレージと言えばたかさん_ブランド施策.pdf）
 5. 同規模チャンネル調査（30件・伸びの数字まで確認できたのは14件）：
-   https://claude.ai/artifact/（同規模チャンネル調査）／PDF：docs/taka_garage/同規模チャンネル調査_2026-11.pdf
+   https://claude.ai/artifact/Dbpz2236P9hUQrGgBig3U3／PDF：docs/taka_garage/同規模チャンネル調査_2026-11.pdf
    要点：ゴールと期限のある連載（じんた）、お金の数字、視聴者層の名指し、長尺→ショート切り出しと本数、作業そのものを見せる、比較の型、【】シリーズ名と曜日固定
 6. AI社員：.claude/agents/（進行管理・リサーチ・企画・台本・サムネ・ショート・分析・営業）。共通ルールは docs/taka_garage/チャンネル基本ルール.md
 
