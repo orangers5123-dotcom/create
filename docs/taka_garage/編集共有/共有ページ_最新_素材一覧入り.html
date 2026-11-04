@@ -1,0 +1,753 @@
+<title>たかガレージ 編集共有</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+  /* Layout: single reading column. Concept → hook → script → crew notes → launch plan. Sponsor-section chapters carry an accent edge. */
+  :root {
+    --bg: #ECEDEE; --surface: #FFFFFF; --surface-2: #F4F5F5; --border: #D7DADC;
+    --text: #1A1C1E; --text-muted: #5B6166; --accent: #B85A16; --accent-ink: #8C4410;
+    --accent-soft: #FBEADB; --secondary: #2F5E77; --secondary-soft: #E3EDF1;
+    --good: #2E7D46; --good-soft: #E3F1E7; --warn: #8A6D12; --warn-soft: #F4EBD2;
+    --critical: #B23A2C; --critical-soft: #F6E3E0;
+    --shadow: 0 1px 2px rgba(20,22,24,0.06), 0 8px 24px -16px rgba(20,22,24,0.18);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #15171A; --surface: #1C1F22; --surface-2: #22262A; --border: #32373C;
+      --text: #E7E8E6; --text-muted: #9AA0A6; --accent: #E8872F; --accent-ink: #FFD9AE;
+      --accent-soft: #3A2A16; --secondary: #7FB8D1; --secondary-soft: #1E2E35;
+      --good: #5CC37A; --good-soft: #1C2E20; --warn: #D9B84E; --warn-soft: #332C16;
+      --critical: #E8705C; --critical-soft: #35211D;
+      --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px -16px rgba(0,0,0,0.5);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #15171A; --surface: #1C1F22; --surface-2: #22262A; --border: #32373C;
+    --text: #E7E8E6; --text-muted: #9AA0A6; --accent: #E8872F; --accent-ink: #FFD9AE;
+    --accent-soft: #3A2A16; --secondary: #7FB8D1; --secondary-soft: #1E2E35;
+    --good: #5CC37A; --good-soft: #1C2E20; --warn: #D9B84E; --warn-soft: #332C16;
+    --critical: #E8705C; --critical-soft: #35211D;
+    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px -16px rgba(0,0,0,0.5);
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic Medium", "YuGothic", "Meiryo", sans-serif;
+    line-height: 1.8; -webkit-font-smoothing: antialiased;
+  }
+  .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; }
+  .wrap { max-width: 880px; margin: 0 auto; padding-block: 48px 96px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .eyebrow { font-family: ui-monospace, monospace; font-size: 12px; letter-spacing: 0.14em; color: var(--secondary); text-transform: uppercase; margin: 0 0 10px; }
+  h1 { font-size: 28px; font-weight: 800; letter-spacing: -0.01em; text-wrap: balance; margin: 0 0 10px; }
+  .meta-line { color: var(--text-muted); font-size: 14px; margin: 0; }
+  section { margin-top: 56px; }
+  .sec-eyebrow { font-family: ui-monospace, monospace; font-size: 12px; letter-spacing: 0.1em; color: var(--secondary); text-transform: uppercase; margin: 0 0 6px; }
+  h2 { font-size: 21px; font-weight: 800; letter-spacing: -0.005em; margin: 0 0 16px; text-wrap: balance; }
+  h3 { font-size: 15.5px; font-weight: 700; margin: 0 0 8px; text-wrap: balance; }
+  p { margin: 0 0 14px; max-width: 46em; }
+  ul.plain { padding-left: 1.2em; margin: 0 0 14px; }
+  ul.plain li { margin-bottom: 6px; }
+
+  .toc { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
+  .toc a { font-size: 13px; padding: 5px 12px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--text); text-decoration: none; }
+  .toc a:hover, .toc a:focus-visible { border-color: var(--accent); color: var(--accent-ink); outline: none; }
+
+  .status-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 680px) { .status-grid { grid-template-columns: 1fr; } }
+  .sbox { border-radius: 10px; padding: 16px 20px; min-width: 0; }
+  .sbox.done { background: var(--good-soft); border: 1px solid color-mix(in srgb, var(--good) 35%, var(--border)); }
+  .sbox.open { background: var(--warn-soft); border: 1px solid color-mix(in srgb, var(--warn) 40%, var(--border)); }
+  .sbox h3 { font-size: 14px; }
+  .sbox.done h3 { color: var(--good); }
+  .sbox.open h3 { color: var(--warn); }
+  .sbox ul { margin: 0; padding-left: 1.2em; font-size: 14px; }
+  .sbox li { margin-bottom: 5px; }
+
+  .concept { background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border)); border-radius: 12px; padding: 24px 26px; }
+  .concept .clabel { font-family: ui-monospace, monospace; font-size: 11px; letter-spacing: 0.08em; color: var(--accent-ink); margin: 0 0 6px; }
+  .concept .cmain { font-size: 22px; font-weight: 800; line-height: 1.5; margin: 0 0 18px; text-wrap: balance; color: var(--text); max-width: none; }
+  .concept .csub { font-size: 16px; font-weight: 700; margin: 0 0 6px; color: var(--text); }
+  .concept p:last-child { margin-bottom: 0; }
+
+  .kv { display: grid; grid-template-columns: 9.5em 1fr; gap: 0; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--surface); }
+  .kv dt, .kv dd { margin: 0; padding: 11px 14px; border-bottom: 1px solid var(--border); font-size: 14px; }
+  .kv dt { background: var(--surface-2); color: var(--text-muted); font-weight: 700; font-size: 13px; }
+  .kv dd { min-width: 0; }
+  .kv dt:last-of-type, .kv dd:last-of-type { border-bottom: none; }
+  @media (max-width: 560px) { .kv { grid-template-columns: 1fr; } .kv dt { border-bottom: none; padding-bottom: 2px; } }
+
+  .meta-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  @media (max-width: 680px) { .meta-grid { grid-template-columns: 1fr; } }
+  .mtile { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; box-shadow: var(--shadow); min-width: 0; }
+  .mtile .mlabel { font-family: ui-monospace, monospace; font-size: 11px; letter-spacing: 0.06em; color: var(--text-muted); margin: 0 0 6px; }
+  .mtile .mval { font-size: 15px; font-weight: 700; margin: 0; }
+  .mtile .msub { font-size: 12.5px; color: var(--text-muted); margin: 4px 0 0; }
+
+  .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; min-width: 640px; }
+  thead th { text-align: left; background: var(--surface-2); font-family: ui-monospace, monospace; font-size: 11px; letter-spacing: 0.03em; color: var(--text-muted); padding: 10px 12px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  tbody td { padding: 11px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tbody tr:last-child td { border-bottom: none; }
+  td.num { font-family: ui-monospace, monospace; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td.bad { color: var(--critical); font-weight: 700; }
+
+  .thumb-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+  @media (max-width: 760px) { .thumb-grid { grid-template-columns: 1fr; } }
+  .tcard { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; box-shadow: var(--shadow); min-width: 0; }
+  .tcard .ttag { font-family: ui-monospace, monospace; font-size: 11px; color: var(--secondary); margin: 0 0 8px; }
+  .tcard .ttext { font-size: 17px; font-weight: 800; margin: 0 0 8px; line-height: 1.4; }
+  .tcard p { font-size: 13.5px; margin-bottom: 6px; }
+  .tcard p:last-child { margin-bottom: 0; }
+
+  .thumb-rules { background: var(--surface-2); border-radius: 10px; padding: 14px 18px; }
+  .thumb-rules .clabel { font-family: ui-monospace, monospace; font-size: 11px; letter-spacing: 0.08em; color: var(--accent-ink); margin: 0 0 6px; }
+  .thumb-rules ul { margin: 0; padding-left: 1.2em; font-size: 14px; }
+  .tfig { margin: 0; min-width: 0; }
+  .tfig img { width: 100%; aspect-ratio: 16 / 9; display: block; border-radius: 8px; border: 1px solid var(--border); }
+  .tfig figcaption { font-size: 12.5px; color: var(--text-muted); margin-top: 6px; }
+
+  .greet { margin-top: 16px; background: var(--secondary-soft); border: 1px solid color-mix(in srgb, var(--secondary) 35%, var(--border)); border-radius: 10px; padding: 18px 22px; }
+  .greet h3 { color: var(--secondary); }
+  .greet .glabel { font-weight: 700; font-size: 13px; color: var(--secondary); margin: 14px 0 4px; }
+  .greet ul { margin: 0; padding-left: 1.2em; font-size: 14px; }
+  .greet li { margin-bottom: 6px; }
+  .greet p:last-child { margin-bottom: 0; }
+
+  .beat { display: grid; grid-template-columns: 5.2em 1fr; gap: 0 14px; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
+  .beat:last-child { border-bottom: none; }
+  .beat .bt { font-family: ui-monospace, monospace; font-weight: 700; color: var(--accent-ink); }
+  .beat .bd { min-width: 0; }
+  .beatbox { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 6px 20px; box-shadow: var(--shadow); }
+
+  .chapter { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 18px 22px; margin-bottom: 14px; box-shadow: var(--shadow); }
+  .chapter.sponsor { border-left: 4px solid var(--accent); }
+  .chapter-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+  .chapter-time { font-family: ui-monospace, monospace; font-weight: 700; color: var(--accent-ink); font-size: 14px; white-space: nowrap; }
+  .chapter-title { font-weight: 700; font-size: 15.5px; }
+  .chapter-goal { font-size: 12.5px; color: var(--text-muted); margin: 0 0 12px; }
+  .rows { display: grid; grid-template-columns: 4.6em 1fr; gap: 6px 12px; font-size: 14px; }
+  .rows .rl { font-family: ui-monospace, monospace; font-size: 11px; letter-spacing: 0.04em; color: var(--secondary); padding-top: 3px; }
+  .rows .rv { min-width: 0; }
+  .rows .rv ul { margin: 0; padding-left: 1.1em; }
+  .rows .rv li { margin-bottom: 3px; }
+  .line { background: var(--surface-2); border-radius: 6px; padding: 6px 10px; margin: 0 0 6px; }
+  .line:last-child { margin-bottom: 0; }
+  .tag { display: inline-block; font-family: ui-monospace, monospace; font-size: 10.5px; letter-spacing: 0.05em; padding: 2px 7px; border-radius: 4px; margin-left: 8px; vertical-align: middle; }
+  .tag.must { background: var(--critical-soft); color: var(--critical); }
+  .tag.reco { background: var(--accent-soft); color: var(--accent-ink); }
+  .tag.new { background: var(--secondary-soft); color: var(--secondary); }
+
+  .crew-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 720px) { .crew-grid { grid-template-columns: 1fr; } }
+  .crew { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px; box-shadow: var(--shadow); min-width: 0; }
+  .crew h3 { display: flex; gap: 8px; align-items: baseline; }
+  .crew h3 .who { font-family: ui-monospace, monospace; font-size: 11px; color: var(--secondary); font-weight: 400; }
+  .crew ol { margin: 0; padding-left: 1.3em; font-size: 14px; }
+  .crew li { margin-bottom: 8px; }
+  .crew li:last-child { margin-bottom: 0; }
+
+  .checklist { list-style: none; margin: 0; padding: 0; }
+  .checklist li { display: flex; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
+  .checklist li:last-child { border-bottom: none; }
+  .checklist .cmark { font-family: ui-monospace, monospace; color: var(--secondary); flex-shrink: 0; }
+
+  .desc-template { background: var(--surface-2); border: 1px dashed var(--border); border-radius: 10px; padding: 16px 20px; font-size: 13.5px; font-family: ui-monospace, monospace; white-space: pre-wrap; line-height: 1.7; overflow-wrap: anywhere; }
+  .note { font-size: 13px; color: var(--text-muted); margin-top: 10px; }
+
+  .digest { display: grid; gap: 12px; }
+  .dstep { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 20px; box-shadow: var(--shadow); }
+  .dstep.turn { border-color: color-mix(in srgb, var(--accent) 50%, var(--border)); }
+  .dhead { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+  .dlabel, .flabel { display: inline-grid; place-items: center; min-width: 2.2em; height: 2.2em; padding: 0 6px; border-radius: 6px; background: var(--accent-soft); color: var(--accent-ink); font-weight: 800; font-size: 14px; }
+  .dtime, .ftime { font-weight: 700; color: var(--accent-ink); font-size: 13.5px; }
+  .dname { font-weight: 700; font-size: 15.5px; }
+  .flow { display: grid; gap: 10px; }
+  .fstep { display: grid; grid-template-columns: auto 7.5em 1fr; gap: 12px; align-items: start; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; font-size: 14px; }
+  .fstep.turn { border-color: color-mix(in srgb, var(--accent) 50%, var(--border)); }
+  .fstep .ftime { padding-top: 4px; }
+  .fbody { min-width: 0; }
+  @media (max-width: 600px) { .fstep { grid-template-columns: auto 1fr; } .fstep .fbody { grid-column: 1 / -1; } }
+  .star { color: var(--accent); font-weight: 800; }
+  table.shot td:nth-child(2) { min-width: 14em; }
+  code.mono { font-size: 0.92em; background: var(--surface-2); padding: 1px 5px; border-radius: 4px; }
+
+  footer { margin-top: 64px; padding-top: 20px; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 12.5px; }
+</style>
+
+<style>
+ .md table{width:100%;border-collapse:collapse;font-size:13px;margin:8px 0 14px} .md th,.md td{border:1px solid var(--border);padding:6px 8px;text-align:left;vertical-align:top} .md th{background:var(--surface-2)}
+ .md h1{font-size:22px} .md h2{font-size:18px;margin-top:26px} .md h3{font-size:15px} .md code{background:var(--surface-2);padding:1px 5px;border-radius:4px}
+ .note-box{background:var(--accent-soft);border:1px solid color-mix(in srgb, var(--accent) 35%, var(--border));border-radius:10px;padding:14px 18px}
+ .table-scroll{overflow-x:auto}
+</style>
+<div class="wrap md">
+<p class="eyebrow">Edit Handoff · たかガレージ秘密基地</p>
+<div class="note-box"><p><strong>このページは、クラウド側のAI社員（編集連携担当）から、手元のDaVinci担当のClaudeへ渡す編集指示です。</strong>上から順に作業してください。手元の「たかさん専用の編集ルール」とぶつかる所は、手元のルールを優先し、ぶつかった点を高橋さんに伝えてください。</p></div>
+<h2 id="now">今回の指示（2026-11-05）：ショートv3（実際の素材だけで組み直し）</h2><div class="table-scroll"><h1>ショート v3：3Dプリンター作業台（実際の素材だけで組み直し）</h1>
+<ul>
+<li>状態：高橋さんのOK待ち（OKが出たら手元で編集してください）</li>
+<li>書いた日：2026-11-05</li>
+<li>書いた人：編集連携担当（taka-edit-liaison）</li>
+<li>元にしたもの：手元のClaudeが作った素材一覧（38本・74カット）と、v2完成動画の分析</li>
+<li>尺の目安：28〜32秒</li>
+</ul>
+<h2>v2の失敗から変えること（全カット共通）</h2>
+<table>
+<thead>
+<tr>
+<th>変えること</th>
+<th>理由（v2で実際に起きたこと）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>秒数は目安。<strong>カットは動作の切れ目で入れる</strong>（動き出し・置く・ドアが開く等）。秒数に合わせて素材を伸ばしたり切ったりしない</td>
+<td>v2は秒数指定に合わせたため、人のいない机の板（9〜10.5秒）、空のラック（13〜14.5秒）、見切れ（18.8〜25秒）が映った</td>
+</tr>
+<tr>
+<td>人も動きも無い画は使わない（素材一覧で「いない」「ほぼ固定」の画は、プリンター作動中の寄りだけ例外）</td>
+<td>同上</td>
+</tr>
+<tr>
+<td>黒い画面・無音・同じ画2秒以上は入れない</td>
+<td>v2の7.5秒の黒い画面と18秒の無音で勢いが止まった</td>
+</tr>
+<tr>
+<td>足す効果音より、素材の実際の音（ドアの開閉・ハンマー・電動ドライバー・プリンター動作音）を上げる</td>
+<td>実音は画と一致するので、作り物の効果音より違和感が無い。v2は効果音が多くうるさかった</td>
+</tr>
+<tr>
+<td>文字は「上の見出し1つ＋字幕」まで</td>
+<td>v2も概ね守れていたので継続</td>
+</tr>
+</tbody>
+</table>
+<h2>構成（どの素材の何秒を使うか）</h2>
+<table>
+<thead>
+<tr>
+<th>目安</th>
+<th>素材</th>
+<th>画</th>
+<th>音</th>
+<th>文字</th>
+<th>なぜ（根拠）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0.0〜1.8</td>
+<td><strong>C2814 188〜190秒付近</strong>（P2Sを抱えて部屋のドアから出てくる途中から）</td>
+<td>動いている途中から始める。少しだけ寄せる</td>
+<td>0フレーム目に「ドン」1発＋実音</td>
+<td>上に大きく「3Dプリンターを部屋から追い出した」</td>
+<td>机の曲がりは素材ではっきり見えない（素材一覧：△）ので冒頭に使わない。0フレーム目から人が大きく動いている画はこれだけ。「部屋の外に3Dプリンター」は本編サムネのA/Bテストで勝った言葉（41%）。「なぜ追い出した？」が残る（情報ギャップ）</td>
+</tr>
+<tr>
+<td>1.8〜4.0</td>
+<td><strong>C2927</strong>（P2S印刷中の寄り）＋声は <strong>C2921</strong> の「どうしても同じ部屋で…音がやっぱり気になります」</td>
+<td>寄りのまま</td>
+<td>プリンターの動作音を上げる＋声</td>
+<td>字幕＋見出し「理由① うるさい」</td>
+<td>冒頭の「なぜ？」にすぐ答え始める。騒音の話のときは動いているプリンターを映す（v1は静かな完成形だった）</td>
+</tr>
+<tr>
+<td>4.0〜6.0</td>
+<td><strong>C2812 12〜21秒</strong>（指で机を指す）をズーム1.8前後</td>
+<td>指が動いている所</td>
+<td>声「こうしてみると机の曲がりやばい」</td>
+<td>「理由② 机が曲がる」</td>
+<td>曲がりは画で弱いので、理由の2つ目として文字と声で伝える</td>
+</tr>
+<tr>
+<td>6.0〜8.0</td>
+<td><strong>C2813 65〜170秒</strong>から、天板を持ち上げる・外す動きを2カット（早回し可）</td>
+<td>動作の切れ目でカット</td>
+<td>実音</td>
+<td>字幕のみ（「机を撤去」）</td>
+<td>人が大きく動く所だけを使う</td>
+</tr>
+<tr>
+<td>8.0〜9.0</td>
+<td><strong>C2813 295〜420秒</strong>の電動ドライバーの手元 1カット</td>
+<td>寄り</td>
+<td>ドライバーの実音を上げる</td>
+<td>なし</td>
+<td>寄り→引きの切り替えで画に変化を付ける</td>
+</tr>
+<tr>
+<td>9.0〜12.0</td>
+<td><strong>IMG_0816 0〜21秒</strong>（ラックを組み立て→完成）を早回し</td>
+<td>ラックが形になっていく</td>
+<td>実音＋BGM</td>
+<td>「ラックを組む」</td>
+<td>1本の素材で「形になる」変化が見える</td>
+</tr>
+<tr>
+<td>12.0〜13.0</td>
+<td><strong>IMG_0926 115〜165秒</strong>のハンマーで棚板をたたく手元 1カット</td>
+<td>寄り</td>
+<td>ハンマーの実音</td>
+<td>なし</td>
+<td>実音がそのまま効果音になる</td>
+</tr>
+<tr>
+<td>13.0〜15.0</td>
+<td><strong>C2814 192〜199秒</strong>（運んできたP2Sをラックに置く）</td>
+<td>置く動作で切る</td>
+<td>実音</td>
+<td>なし</td>
+<td>冒頭の画の続き。冒頭の「追い出した」がここで回収される</td>
+</tr>
+<tr>
+<td>15.0〜21.0</td>
+<td><strong>C2935 27〜35秒</strong>（ドアが開く→部屋から出る→ラックへ歩く→しゃがむ）</td>
+<td>27秒のドアが開く所から。歩きは少し早回し可。しゃがむ所で切る</td>
+<td>ドアの実音を上げる</td>
+<td>見出し「部屋から一歩で工房」</td>
+<td>動画の一番の山。v2では見切れて見えなかった「一歩出る」動きが、この素材なら全身で映っている</td>
+</tr>
+<tr>
+<td>21.0〜25.0</td>
+<td><strong>C2921 4〜110秒</strong>から「音は全く気にならなくなりました」「この動線気に入ってます」</td>
+<td>しゃがんで話すたかさん</td>
+<td>声</td>
+<td>字幕のみ</td>
+<td>冒頭の理由①（うるさい）を本人の言葉で閉じる</td>
+</tr>
+<tr>
+<td>25.0〜29.0</td>
+<td><strong>C2936</strong>（棚のランプの横にフェンダーパーツを置く手元）→ <strong>IMG_0929</strong>（カイエンの横で話すたかさん）を1カットずつ</td>
+<td>置く手元→車</td>
+<td>実音＋BGM</td>
+<td>「このプリンターで作ってるのは… → 本編で」</td>
+<td>本編へ行く理由を「もっと詳しく」ではなく「何を作っているか」の答えにする。自チャンネルではポルシェ回が平均の1.57倍と強い型。※フェンダーの場面が本編に入っているかを手元で確認。入っていなければ、本編にある「補強バー（C2920 5〜31秒）」で「ラックの補強のコツ → 本編で」に差し替え</td>
+</tr>
+</tbody>
+</table>
+<h2>投稿時</h2>
+<ul>
+<li>関連動画に本編 OI3A5PYkNq8 を設定</li>
+<li>タイトル案：「3Dプリンターを部屋から追い出したら最高の工房になった【ガレージ秘密基地】」</li>
+</ul>
+<h2>確かめ方</h2>
+<ul>
+<li>48時間後、v1・v2と比べる：視聴を続けた割合（スワイプされずに見られた割合）、平均再生率、再生数、本編の流入元の「ショート」</li>
+</ul>
+<h2>手元側のメモ</h2>
+<p>（手元のClaude Codeが記入）</p></div><h2 id="v2">中止した指示（v2）と、手元が作った素材一覧</h2><div class="table-scroll"><h1>ショート設計 v2：3Dプリンター作業台（スワイプを止める → 離脱させない → 本編へ）</h1>
+<ul>
+<li>状態：中止（v2は失敗。この指示では編集しないでください。作り直し中）</li>
+<li>書いた日：2026-11-04</li>
+<li>書いた人：編集連携担当（taka-edit-liaison）</li>
+<li>優先度：高</li>
+<li>適用範囲：3Dプリンター作業台ショートの作り直し。考え方はショートすべてに使う</li>
+<li>尺の目安：約30秒</li>
+</ul>
+<h2>根拠の一覧（このページで使う根拠）</h2>
+<table>
+<thead>
+<tr>
+<th>記号</th>
+<th>種類</th>
+<th>内容</th>
+<th>出典</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>D1</td>
+<td>自チャンネルのデータ</td>
+<td>ショートの「視聴を続けた割合（スワイプされずに見られた割合）」：電動昇降デスク不要論61.9%（50秒）、コスパ最強60.0%（35秒）、男心53.2%（1分25秒）、クラファン45.7%（47秒）。冒頭で価格・逆張りを見せた短い回が高く、長い回が低い</td>
+<td>10/28 アナリティクス分析（Studioのスクショ）</td>
+</tr>
+<tr>
+<td>D2</td>
+<td>自チャンネルのデータ</td>
+<td>ショートの型別：配線・デスク周りの定番品は中央値4.1万回（問題→解決が見える）、3Dプリンターは1.3万回、プロジェクター・XRは中央値4,800回</td>
+<td>docs/taka_garage/research/2026-11-04_全動画分析.md</td>
+</tr>
+<tr>
+<td>D3</td>
+<td>自チャンネルのデータ</td>
+<td>本編OI3A5PYkNq8：サムネのA/Bテストで「一歩で工房／部屋の外に3Dプリンター」が41%（小さい説明文だけの2案は26%・31%）。検索語句の1位は「3dプリンター」20.9%。0:30維持率46%（通常以下）</td>
+<td>11/2 Studioのスクショ</td>
+</tr>
+<tr>
+<td>D4</td>
+<td>自チャンネルのデータ</td>
+<td>11/4公開のショート（v1）：0〜3秒は完成形の静止画＋BGMだけ（声は3.0秒から、効果音なし）。7.5〜12.9秒は完成形が約5秒静止。早回しはカットごとの効果音なし</td>
+<td>完成動画と音声の分析（0.25秒ごとの音量、0.5秒ごとのコマ）</td>
+</tr>
+<tr>
+<td>O1</td>
+<td>YouTube公式</td>
+<td>ショートの関連動画リンクは、再生画面のチャンネル名の下に表示される</td>
+<td>support.google.com/youtube/answer/14075157</td>
+</tr>
+<tr>
+<td>O2</td>
+<td>外部の解説（非公式）</td>
+<td>Studioの「視聴を続けた割合」が低いのは冒頭の問題、高いのに平均再生率が低いのは途中のテンポの問題と読むのが一般的</td>
+<td>contentstudio.io/blog/youtube-shorts-analytics-guide 等</td>
+</tr>
+<tr>
+<td>P1</td>
+<td>心理学</td>
+<td>定位反応：急な変化（動き・音の立ち上がり）に人の注意は自動的に向く</td>
+<td>Sokolov (1963)、Yantis &amp; Jonides (1984) 突然の出現は注意を奪う</td>
+</tr>
+<tr>
+<td>P2</td>
+<td>心理学</td>
+<td>ネガティビティ・バイアス：悪い情報（問題・失敗）は良い情報より強く注意を引く</td>
+<td>Baumeister et al. (2001) "Bad is stronger than good"</td>
+</tr>
+<tr>
+<td>P3</td>
+<td>心理学</td>
+<td>情報ギャップ理論：答えの一部を見せて「知らない部分」を自覚させると、知りたい気持ち（好奇心）が生まれる</td>
+<td>Loewenstein (1994)</td>
+</tr>
+<tr>
+<td>P4</td>
+<td>心理学</td>
+<td>ツァイガルニク効果：終わっていないこと（未解決の問い）は気になり続ける</td>
+<td>Zeigarnik (1927)</td>
+</tr>
+<tr>
+<td>P5</td>
+<td>心理学</td>
+<td>目標勾配：ゴールが近づくほど続ける意欲が上がる（進み具合が見えると離脱しにくい）</td>
+<td>Hull (1932)、Kivetz, Urminsky &amp; Zheng (2006)</td>
+</tr>
+<tr>
+<td>P6</td>
+<td>心理学</td>
+<td>ピーク・エンドの法則：体験の評価は「一番の山」と「終わり方」で決まる</td>
+<td>Fredrickson &amp; Kahneman (1993)</td>
+</tr>
+<tr>
+<td>P7</td>
+<td>心理学</td>
+<td>処理の流暢性・認知負荷：読みやすく情報が少ないほど理解され、好まれる。同時に多くの文字を出すと処理が追いつかない</td>
+<td>Reber &amp; Schwarz (1999)、Sweller (1988)</td>
+</tr>
+<tr>
+<td>P8</td>
+<td>心理学</td>
+<td>指さし・視線の手がかり：人の指さしや視線の方向に、見る人の注意が移る</td>
+<td>Friesen &amp; Kingstone (1998)、Langton et al. (2000)</td>
+</tr>
+<tr>
+<td>T</td>
+<td>高橋さんの判断</td>
+<td>ショートは最初の0.2秒が勝負。初手から効果音。キャッチーな見た目で目を惹きつける</td>
+<td>11/4 フィードバック</td>
+</tr>
+</tbody>
+</table>
+<p>心理学の知見は一般的な研究結果で、YouTubeのショートでそのまま効くかは仮説です。公開後の数字（下の「確認のしかた」）で確かめます。</p>
+<h2>第1段階：スワイプする手を止める（0.0〜1.0秒）</h2>
+<table>
+<thead>
+<tr>
+<th>秒</th>
+<th>画</th>
+<th>音</th>
+<th>文字</th>
+<th>なぜ（根拠）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0.00〜0.20</td>
+<td>机の上の3Dプリンターと、曲がった机が1枚に入る画（v1の3〜5.5秒の素材）に、125%→100%の急ズーム</td>
+<td>0フレーム目に「ドン」（衝撃音）。BGMは0.2秒後から</td>
+<td>画面上1/4に極太で「机が曲がった」</td>
+<td>動きと音の立ち上がりで注意を奪う（P1、T）。良い結果より「問題」の方が目を止める（P2）。v1は静止画＋BGMだけで止める要素がなかった（D4）。文字は6文字で一瞬で読める（P7）</td>
+</tr>
+<tr>
+<td>0.20〜0.60</td>
+<td>曲がりを指さす指のアップ（v1の4〜5.5秒の素材）</td>
+<td>プリンターの動作音を少し上げる</td>
+<td>「3Dプリンター2台の重さで」（小さめ）</td>
+<td>2つ目の変化で、止まった指を引き留める（P1）。何が起きたかを具体化（D2：問題が見える型が強い）</td>
+</tr>
+<tr>
+<td>0.60〜1.00</td>
+<td>完成したラックに一瞬切り替え</td>
+<td>「シャキーン」系の効果音</td>
+<td>「→ 一歩で工房」</td>
+<td>結果だけを一瞬見せ、「どうやって？」を残す（P3）。「一歩で工房」は本編のA/Bテストで勝った言葉（D3）</td>
+</tr>
+</tbody>
+</table>
+<h2>第2段階：途中で離脱させない（1.0〜27秒）</h2>
+<table>
+<thead>
+<tr>
+<th>秒</th>
+<th>画</th>
+<th>音</th>
+<th>文字</th>
+<th>なぜ（根拠）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1.0〜3.0</td>
+<td>机の曲がりを指さすたかさん（v1の3〜5.5秒）</td>
+<td>声「こうしてみると机の曲がりやばい」</td>
+<td>字幕（画面の真ん中より少し下まで）</td>
+<td>声は1秒以内に入れて、人がいることを伝える。問題を本人の言葉で確定させる（P2）</td>
+</tr>
+<tr>
+<td>3.0〜6.0</td>
+<td>動いているプリンターの寄り（v1の6〜7.5秒）。うるさそうな様子（耳をふさぐ素材があれば）</td>
+<td>プリンター音を上げる＋声「どうしても同じ部屋で」</td>
+<td>「音もうるさい」</td>
+<td>v1は騒音の話なのに静かな完成形が5秒映っていた（D4）。問題を2つ重ねて解決への期待を高める（P2、P3）</td>
+</tr>
+<tr>
+<td>6.0</td>
+<td>文字だけ0.5秒</td>
+<td>効果音</td>
+<td>「3ステップで解決」</td>
+<td>進み具合とゴールを先に示す（P5）。終わっていない手順は気になり続ける（P4）</td>
+</tr>
+<tr>
+<td>6.5〜9.5</td>
+<td>①机を撤去（のぞき込む→撤去）</td>
+<td>カットごとに「シュッ」「ガチャ」</td>
+<td>「①机を撤去」（左上に①/3）</td>
+<td>1〜1.5秒ごとに画と音を変え、注意を保つ（P1）。番号で残りが分かる（P5）。v1は早回しの音が単調だった（D4）</td>
+</tr>
+<tr>
+<td>9.5〜14.0</td>
+<td>②メタルラックを組む</td>
+<td>同上</td>
+<td>「②ラックを組む」</td>
+<td>同上</td>
+</tr>
+<tr>
+<td>14.0〜17.0</td>
+<td>③2台を部屋の外へ</td>
+<td>同上</td>
+<td>「③2台を部屋の外へ」</td>
+<td>同上</td>
+</tr>
+<tr>
+<td>17.0〜17.8</td>
+<td>たかさんの顔の寄り（または完成形の前で止まる）</td>
+<td>BGMを一瞬止める</td>
+<td>「一番よかったのは…」</td>
+<td>山の直前で問いを開く（P4）。音を止めるのも変化で注意が戻る（P1）</td>
+</tr>
+<tr>
+<td>17.8〜24.0</td>
+<td>部屋のドアから一歩出て、すぐ作業台がある動線（v1の32〜34秒の、たかさんがドアから出入りする素材）→ 完成形</td>
+<td>効果音＋BGM再開</td>
+<td>「部屋から一歩で工房」</td>
+<td>動画の一番の山を、言葉ではなく画で見せる（P6）。サムネで勝った「一歩で工房」を体験として回収（D3）</td>
+</tr>
+<tr>
+<td>24.0〜27.0</td>
+<td>しゃがんで話すたかさん（v1の24〜27秒）</td>
+<td>声「音は全く気にならなくなりました」</td>
+<td>字幕のみ（真ん中の黄色い文字は出さない）</td>
+<td>冒頭で開いた騒音の問題を閉じる（P4）。同時に出す文字は2か所まで（P7）</td>
+</tr>
+</tbody>
+</table>
+<p>全体のルール：2秒以上同じ画を止めない／字幕は画面の真ん中より少し下まで（下は関連動画リンクやタイトルで隠れる：O1）／同時に出す文字は「上の見出し＋字幕」の2か所まで（P7）／尺は30秒前後（短い回ほど視聴を続けた割合が高い：D1）。</p>
+<h2>第3段階：本編を見たいと思わせる（27〜31秒）</h2>
+<table>
+<thead>
+<tr>
+<th>秒</th>
+<th>画</th>
+<th>音</th>
+<th>文字</th>
+<th>なぜ（根拠）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>27.0〜30.0</td>
+<td>たかさんが画面の左下（関連動画リンクの位置）を指さす</td>
+<td>効果音1発</td>
+<td>「どのラックを選んだ？置き方のコツ → 本編」（本編で実際に話している内容に合わせて手元で調整）</td>
+<td>「もっと詳しく」ではなく、本編にある具体的な答えへの問いを残す（P3）。リンクはチャンネル名の下に出るので、指さしで視線を誘導する（O1、P8）</td>
+</tr>
+<tr>
+<td>30.0〜30.5</td>
+<td>0秒目と同じ「曲がった机」の画に戻る</td>
+<td>「ドン」</td>
+<td>なし</td>
+<td>終わりを強く（P6）。最初の画に戻り、2周目に自然につながる</td>
+</tr>
+</tbody>
+</table>
+<p>投稿時：関連動画にOI3A5PYkNq8を設定（O1）。タイトルは「問題→結果」で具体的に。案：「3Dプリンター2台で机が曲がった→部屋の外に工房を作った【ガレージ秘密基地】」（検索語の1位が「3dプリンター」：D3）</p>
+<h2>本編側の注意</h2>
+<ul>
+<li>本編は0:30時点で46%しか残っていない（D3）。ショートから来た人は本編の冒頭から見るので、本編の冒頭が弱いと、ショートで作った期待が冒頭で切れる。本編の冒頭を変えられない場合でも、固定コメントや説明文で「◯分◯秒から、ラックの選び方」のように、ショートで約束した答えの場所を示す</li>
+</ul>
+<h2>確認のしかた（v1と比べる）</h2>
+<ul>
+<li>48時間後：Studioの「視聴を続けた割合」（目標60%以上：D1の最高61.9%）、平均再生率、再生数</li>
+<li>本編の流入元で「ショート」が増えたか</li>
+<li>解釈：視聴を続けた割合が低い→第1段階の問題。高いのに平均再生率が低い→第2段階の問題（O2）</li>
+</ul>
+<h2>手元側のメモ</h2>
+<p><strong>2026-11-05 記入（手元のClaude Code）：作り直し用の素材確認。たか メタルラックのカメラ素材38本・74カット。編集・タイムラインの変更はしていません。</strong></p><div class="note-box"><p><strong>作り直し前に分かったこと</strong></p><ul><li>机の曲がり：<strong>△ はっきり分かる画はない</strong>。v2の第1段階「曲がった机に急ズーム」は、C2812 0〜2.5秒を寄せて使うのが一番近い（たわみはわずか）。文字で「机が曲がった」と補う前提</li><li>プリンターを運ぶ画：<strong>○ C2814 186〜197秒</strong>（P2Sを抱えてドアから出てラックへ）。③「2台を部屋の外へ」に使える</li><li>部屋から一歩出て作業台に着く画：<strong>○ C2935 24〜37秒</strong>（27秒ドアが開く→29秒出る→35秒しゃがむ）。山の「部屋から一歩で工房」に使える</li><li>耳をふさぐなど「うるさそうな様子」の画は見つからなかった。騒音は動作中のプリンター C2927・C2911 で見せる</li><li>たかさんが画面左下を指さす画もない（第3段階の指さしは文字・矢印で代用）</li></ul></div><p>作成：2026-11-04　対象：<code>10:24/素材</code> と <code>10:24/素材/追加</code> のカメラ素材すべて（38本）。編集はしていません。</p>
+<p>判定の目安：ピント＝鮮明度（ラプラシアン分散）が低いと「ピント甘い・ブレ」、明るさ＝平均輝度45未満で「暗い」、動き＝コマ間差分。人＝Appleの顔・人物検出＋目視。</p>
+<h3>必ず確認してほしいと言われた3つの画</h3>
+<div class="table-wrap"><table><thead><tr><th>探した画</th><th>結果</th><th>どこ</th><th>メモ</th></tr></thead><tbody><tr><td>机の曲がりがはっきり分かる画</td><td><strong>△ はっきりした画はない</strong></td><td>C2812 0〜2.5秒（机＋K2 Proの正面）／C2813 143〜148秒ごろ（天板を手で押す）</td><td>C2812は引きの画で、たわみはわずか。寄せる（ズーム1.8前後）と天板の端が少し下がって見える程度。横から天板の曲がりを見せた画は見つからなかった。C2916 20〜28秒の天板のふちの寄りは、曲がりではなく純正の色の説明</td></tr><tr><td>プリンターを運んでいる画</td><td><strong>○ ある</strong></td><td><strong>C2814 186〜197秒</strong></td><td>引き・固定。たかさんがP2Sを両手で抱えて部屋のドアから出てきて、ラックの前まで運び、198秒からひざをついて置く。ピント・明るさ問題なし。運ぶのは2台目（P2S）だけで、1台目（K2 Pro）を運ぶ画はない</td></tr><tr><td>たかさんが部屋から一歩出て作業台に着く画</td><td><strong>○ ある</strong></td><td><strong>C2935 24〜37秒</strong>（他にC2934 3〜21秒）</td><td>C2935はラック横の固定（時計23:07）。27秒にドアが開き→29秒に部屋から出る→30〜34秒にラックへ歩く→35秒でしゃがむ。人は全身で映る（顔はマスク）。C2934は天井の六角ライトが入る広い引きで、ドアからラックまで歩く（人は小さめ）</td></tr></tbody></table></div>
+<h3>素材ごとの一覧</h3>
+<p>★＝上の3つに当たるカット。「使いどころ」はショートでの役割の目安です。</p>
+<div class="table-wrap"><table><thead><tr><th>素材名</th><th>秒</th><th>何が映っているか</th><th>人</th><th>動き</th><th>ピント・明るさ</th><th>使いどころ</th></tr></thead><tbody><tr><td>C2812.mov</td><td>0〜24.5</td><td>旧デスク（右奥にK2 Pro）を正面から。3秒・12〜21秒は手前から指で机を指す、6〜8秒は両手のジェスチャー。天板のたわみはわずか（寄りにすれば少し分かる）</td><td>手だけ</td><td>少し動く</td><td>問題なし</td><td>Before・机</td></tr><tr><td>C2812.mov</td><td>25〜27</td><td>机の下・床の寄り（カメラ移動中）</td><td>いない</td><td>大きく動く</td><td>ピント甘い・ブレ・手ブレ・速い動きあり</td><td>つなぎ</td></tr><tr><td>C2812.mov</td><td>27〜44</td><td>ガレージで組み立て途中のメタルラック（骨組み＋棚板）。手前で手振り</td><td>手だけ</td><td>大きく動く</td><td>問題なし</td><td>作業</td></tr><tr><td>C2813.mov</td><td>0〜65</td><td>引き・固定。旧デスクの上の物を片付ける（たかさんが机の前を行き来）</td><td>いる</td><td>少し動く</td><td>問題なし</td><td>作業（撤去）</td></tr><tr><td>C2813.mov</td><td>65〜170</td><td>引き・固定。天板の上を片付けて天板を外し、立てる→脚を外す（デスク解体）。143〜148秒ごろ天板を手で押している</td><td>いる</td><td>少し動く</td><td>問題なし</td><td>作業（撤去）</td></tr><tr><td>C2813.mov</td><td>170〜295</td><td>床に置いた天板の脚・金具をドライバーで外す（しゃがみ作業）</td><td>いる</td><td>少し動く</td><td>問題なし</td><td>作業（撤去）</td></tr><tr><td>C2813.mov</td><td>295〜420</td><td>寄り。脚フレームのネジを電動ドライバーで外す手元</td><td>手だけ</td><td>少し動く</td><td>問題なし</td><td>作業（撤去）</td></tr><tr><td>C2813.mov</td><td>420〜441</td><td>床の寄り・終わり（人がフレームアウト）</td><td>いない</td><td>少し動く</td><td>問題なし</td><td>不要</td></tr><tr><td>C2814.mov</td><td>0〜8</td><td>空いたスペース（部屋のドア・工具箱）</td><td>一部だけ</td><td>少し動く</td><td>問題なし</td><td>Before・空間</td></tr><tr><td>C2814.mov</td><td>8〜40</td><td>引き・固定。組んだメタルラックを置いて位置合わせ</td><td>いる</td><td>少し動く</td><td>問題なし</td><td>作業（設置）</td></tr><tr><td>C2814.mov</td><td>40〜100</td><td>ラックの前でしゃがんで調整</td><td>いる</td><td>ほぼ固定</td><td>問題なし</td><td>作業（設置）</td></tr><tr><td>C2814.mov</td><td>100〜170</td><td>下段に1台目（K2 Pro）を入れて配線</td><td>いる</td><td>ほぼ固定</td><td>問題なし</td><td>作業（設置）</td></tr><tr><td>C2814.mov</td><td>170〜186</td><td>部屋のドアへ入っていく（2台目を取りに行く）</td><td>いる</td><td>ほぼ固定</td><td>問題なし</td><td>作業（運搬）</td></tr><tr><td>C2814.mov</td><td>186〜197</td><td>★P2Sを両手で抱えて部屋のドアから出てきて、ラックまで運ぶ</td><td>いる</td><td>少し動く</td><td>問題なし</td><td>作業（運搬）★</td></tr><tr><td>C2814.mov</td><td>197〜265</td><td>ラックの前にひざをついて2台目を置き、調整</td><td>いる</td><td>少し動く</td><td>問題なし</td><td>作業（設置）</td></tr><tr><td>C2815.mov</td><td>0〜6</td><td>完成：下段に2台（K2 Pro・P2S）の寄り</td><td>いない</td><td>少し動く</td><td>問題なし</td><td>After</td></tr><tr><td>C2815.mov</td><td>6〜20</td><td>同じ画、たかさんの脚が前を横切る</td><td>一部（脚だけ）</td><td>少し動く</td><td>問題なし</td><td>After</td></tr><tr><td>C2815.mov</td><td>20〜29</td><td>完成：2台の寄り（人なし）</td><td>いない</td><td>少し動く</td><td>問題なし</td><td>After</td></tr><tr><td>C2815.mov</td><td>29〜53</td><td>しゃがんで2台を説明（腕・体の一部が左に入る）</td><td>一部（腕・体）</td><td>少し動く</td><td>問題なし</td><td>After・説明</td></tr><tr><td>IMG_0816.MOV</td><td>0〜21</td><td>引き・固定。ガレージでメタルラックを組み立てる（棚板を差し込む→完成）</td><td>いる</td><td>少し動く</td><td>問題なし</td><td>作業（組み立て）</td></tr><tr><td>IMG_0926.MOV</td><td>0〜115</td><td>手持ち。棚の高さを測って直す（歪み直し）。たかさん正面〜背中</td><td>いる（顔あり）</td><td>少し動く</td><td>問題なし</td><td>作業（歪み直し）</td></tr><tr><td>IMG_0926.MOV</td><td>115〜165</td><td>寄り。棚板をハンマーでたたいて水平にする手元</td><td>手だけ</td><td>大きく動く</td><td>問題なし</td><td>作業（歪み直し）</td></tr><tr><td>IMG_0926.MOV</td><td>165〜215</td><td>棚に物を置いていく（フィギュアケース・ランプ）</td><td>いる</td><td>少し動く</td><td>問題なし</td><td>After</td></tr><tr><td>IMG_0926.MOV</td><td>215〜246</td><td>ランプ点灯。棚の上段の寄り</td><td>一部だけ</td><td>大きく動く</td><td>手ブレ・速い動きあり</td><td>After</td></tr><tr><td>C2916.mov</td><td>0〜14</td><td>外した旧デスクの天板と脚（シャッターの前に立てかけ）</td><td>いない</td><td>大きく動く</td><td>問題なし</td><td>Before・机</td></tr><tr><td>C2916.mov</td><td>14〜20</td><td>脚フレームを指さす</td><td>いない</td><td>大きく動く</td><td>問題なし</td><td>Before・机</td></tr><tr><td>C2916.mov</td><td>20〜28</td><td>天板のふちを手でなぞる寄り（純正の色を見せている場面。曲がりの説明ではない）</td><td>手だけ</td><td>大きく動く</td><td>ピント甘い・ブレ</td><td>Before・机★</td></tr><tr><td>C2916.mov</td><td>28〜91</td><td>脚フレームの構造を指さして説明（真ん中に補強なし）</td><td>いない</td><td>少し動く</td><td>問題なし</td><td>Before・机</td></tr><tr><td>C2917.mov</td><td>0〜12</td><td>完成ラックの引き（2台＋ランプ）</td><td>いない</td><td>大きく動く</td><td>手ブレ・速い動きあり</td><td>After</td></tr><tr><td>C2917.mov</td><td>12〜46</td><td>ラック横に立って説明（たかさん全身・顔はマスク）</td><td>いる（顔あり）</td><td>少し動く</td><td>問題なし</td><td>After・説明</td></tr><tr><td>C2917.mov</td><td>46〜105</td><td>完成ラックの寄り。手前で手振り・指さし</td><td>手だけ</td><td>少し動く</td><td>問題なし</td><td>After</td></tr><tr><td>C2918.mov</td><td>0〜18</td><td>ラックの柱と棚板の角の寄り</td><td>いない</td><td>少し動く</td><td>問題なし</td><td>補足（ラック）</td></tr><tr><td>C2919.mov</td><td>0〜22</td><td>棚板を持ち上げて外せることを見せる手元</td><td>手だけ</td><td>大きく動く</td><td>問題なし</td><td>補足（ラック）</td></tr><tr><td>C2920.mov</td><td>0〜5</td><td>上段の棚（フィギュアケース・ランプ）</td><td>いない</td><td>大きく動く</td><td>問題なし</td><td>After</td></tr><tr><td>C2920.mov</td><td>5〜31</td><td>棚板の裏の補強バーを手で示す</td><td>手だけ</td><td>少し動く</td><td>問題なし</td><td>補足（補強）</td></tr><tr><td>C2920.mov</td><td>31〜44</td><td>下段の2台を手で示す</td><td>手だけ</td><td>少し動く</td><td>手ブレ・速い動きあり</td><td>After</td></tr><tr><td>C2920.mov</td><td>44〜62</td><td>棚板・ランプの寄り（カメラが動く）</td><td>いない</td><td>大きく動く</td><td>手ブレ・速い動きあり</td><td>補足</td></tr><tr><td>C2920.mov</td><td>62〜82</td><td>完成ラックの引き（ドアの横）</td><td>いない</td><td>少し動く</td><td>問題なし</td><td>After</td></tr><tr><td>C2921.mov</td><td>0〜4</td><td>たかさんがフレームインしてしゃがむ</td><td>一部だけ</td><td>少し動く</td><td>問題なし</td><td>つなぎ</td></tr><tr><td>C2921.mov</td><td>4〜110</td><td>ラックの前でしゃがんで話す（騒音・動線の理由）。顔はマスク</td><td>いる（顔あり）</td><td>ほぼ固定</td><td>問題なし</td><td>After・説明</td></tr><tr><td>C2921.mov</td><td>110〜116</td><td>立ち上がってフレームアウト</td><td>いる</td><td>少し動く</td><td>問題なし</td><td>不要</td></tr><tr><td>C2933.mov</td><td>0〜34</td><td>ガレージ入口側からの引き。たかさんが横切る（0〜2秒・20〜27秒）</td><td>いる</td><td>ほぼ固定</td><td>問題なし</td><td>雰囲気</td></tr><tr><td>C2934.mov</td><td>0〜3</td><td>ガレージ入口・シャッター側の引き</td><td>いない</td><td>大きく動く</td><td>手ブレ・速い動きあり</td><td>雰囲気</td></tr><tr><td>C2934.mov</td><td>3〜21</td><td>天井六角ライトのガレージ引き。たかさんが部屋のドアから歩いてラックへ</td><td>いる</td><td>少し動く</td><td>問題なし</td><td>動線</td></tr><tr><td>C2934.mov</td><td>21〜64</td><td>同じ引き。奥のラックでしゃがんで作業（人は小さい）</td><td>いる</td><td>ほぼ固定</td><td>問題なし</td><td>動線</td></tr><tr><td>C2934.mov</td><td>64〜73</td><td>作業を終えて戻る・カメラ前を横切る</td><td>いる</td><td>少し動く</td><td>問題なし</td><td>動線</td></tr><tr><td>C2935.mov</td><td>0〜24</td><td>ラック横の固定（時計23:06）。たかさんがドアから部屋へ入る</td><td>一部だけ</td><td>ほぼ固定</td><td>問題なし</td><td>動線</td></tr><tr><td>C2935.mov</td><td>24〜37</td><td>★ドアが開いて部屋から出てくる→ラックまで歩く→しゃがむ（23:07）</td><td>いる</td><td>ほぼ固定</td><td>問題なし</td><td>動線★</td></tr><tr><td>C2935.mov</td><td>37〜50</td><td>ラックの前でしゃがんでプリンターを操作</td><td>いる</td><td>ほぼ固定</td><td>問題なし</td><td>動線</td></tr><tr><td>C2935.mov</td><td>50〜77</td><td>立ち上がって部屋へ戻る→また出てくる</td><td>いる</td><td>少し動く</td><td>問題なし</td><td>動線</td></tr><tr><td>C2922.mov</td><td>0〜56</td><td>部屋の中のPCデスクに座って作業（背中から）</td><td>いる</td><td>少し動く</td><td>問題なし</td><td>動線（部屋側）</td></tr><tr><td>C2923.mov</td><td>0〜354</td><td>PC画面（Bambu Studio）と手元。スライス・データ準備</td><td>手だけ</td><td>ほぼ固定</td><td>問題なし</td><td>動線（部屋側）</td></tr><tr><td>C2927.mov</td><td>0〜232</td><td>P2Sが印刷している寄り（固定・ほぼ動かない）</td><td>いない</td><td>ほぼ固定</td><td>問題なし</td><td>プリンター作動</td></tr><tr><td>C2911.mov</td><td>0〜8.5</td><td>2台のプリンターの中（印刷中）</td><td>いない</td><td>大きく動く</td><td>手ブレ・速い動きあり</td><td>プリンター作動</td></tr><tr><td>C2924.mov</td><td>0〜52</td><td>P2Sのベッドにスティックのりを塗る手元</td><td>手だけ</td><td>大きく動く</td><td>問題なし</td><td>フェンダー</td></tr><tr><td>C2925.mov</td><td>0〜32</td><td>PC画面（スマホ撮り）</td><td>いない</td><td>少し動く</td><td>ピント甘い・ブレ</td><td>フェンダー</td></tr><tr><td>C2926.mov</td><td>0〜16</td><td>P2Sから印刷物を取り出す</td><td>いない</td><td>少し動く</td><td>問題なし</td><td>フェンダー</td></tr><tr><td>C2928.mov</td><td>0〜19</td><td>棚に並んだフェンダーのパーツを手に取る</td><td>手だけ</td><td>少し動く</td><td>問題なし</td><td>フェンダー</td></tr><tr><td>C2912.mov</td><td>0〜315</td><td>印刷したフェンダーパーツのダボ穴加工・組み合わせ（手元）</td><td>手だけ</td><td>少し動く</td><td>問題なし</td><td>フェンダー</td></tr><tr><td>C2913.mov</td><td>0〜80</td><td>K2 ProとP2Sの印刷の仕上がり比較（手元）</td><td>手だけ</td><td>大きく動く</td><td>問題なし</td><td>フェンダー</td></tr><tr><td>C2914.mov</td><td>0〜118</td><td>パーツの組み付け方の説明（手元）</td><td>手だけ</td><td>大きく動く</td><td>問題なし</td><td>フェンダー</td></tr><tr><td>C2915.mov</td><td>0〜125</td><td>3Dプリンター用のりの説明（手元）</td><td>手だけ</td><td>大きく動く</td><td>問題なし</td><td>フェンダー</td></tr><tr><td>C2929.mov</td><td>0〜23.5</td><td>夜の車のフェンダーにパーツを当てる（ライトあり）</td><td>一部だけ</td><td>少し動く</td><td>ピント甘い・ブレ</td><td>フェンダー</td></tr><tr><td>C2930.mov</td><td>0〜36.5</td><td>同上（前側）</td><td>一部だけ</td><td>少し動く</td><td>ピント甘い・ブレ・暗い</td><td>フェンダー</td></tr><tr><td>C2931.mov</td><td>0〜29.5</td><td>同上（立った姿勢・長いパーツ）</td><td>いる</td><td>少し動く</td><td>ピント甘い・ブレ・暗い</td><td>フェンダー</td></tr><tr><td>C2932.mov</td><td>0〜24.5</td><td>同上（主観・手元）</td><td>手だけ</td><td>少し動く</td><td>ピント甘い・ブレ・暗い</td><td>フェンダー</td></tr><tr><td>C2936.mov</td><td>0〜35</td><td>棚の上（ランプの横）にフェンダーパーツを置く手元</td><td>一部だけ</td><td>少し動く</td><td>問題なし</td><td>フェンダー／After</td></tr><tr><td>C2937.mov</td><td>0〜20</td><td>ランプ（3Dプリント）の寄り・カメラ移動</td><td>いない</td><td>大きく動く</td><td>手ブレ・速い動きあり</td><td>After・小物</td></tr><tr><td>C2938.mov</td><td>0〜8</td><td>フィギュアケースの寄り</td><td>一部だけ</td><td>大きく動く</td><td>手ブレ・速い動きあり</td><td>After・小物</td></tr><tr><td>C2938.mov</td><td>8〜19.5</td><td>完成ラックの引き（カメラが寄る）</td><td>一部だけ</td><td>大きく動く</td><td>手ブレ・速い動きあり</td><td>After</td></tr><tr><td>IMG_0927.MOV</td><td>0〜132</td><td>縦持ち手持ち。デスクでフェンダーの話（3Dデータ・パーツ）</td><td>手だけ</td><td>大きく動く</td><td>手ブレ・速い動きあり</td><td>フェンダー</td></tr><tr><td>IMG_0928.MOV</td><td>0〜177</td><td>手持ち。車の横でフェンダーパーツを当てて説明</td><td>手だけ</td><td>大きく動く</td><td>手ブレ・速い動きあり</td><td>フェンダー</td></tr><tr><td>IMG_0929.MOV</td><td>0〜172</td><td>車の横でしゃがんで話す（修理工場・カイエン）</td><td>いる（顔あり）</td><td>少し動く</td><td>問題なし</td><td>フェンダー</td></tr><tr><td>IMG_0930.MOV</td><td>0〜24</td><td>車の横・終わりのあいさつ</td><td>いない</td><td>大きく動く</td><td>手ブレ・速い動きあり</td><td>フェンダー</td></tr></tbody></table></div>
+<h3>一覧に入れていないもの</h3>
+<ul><li><code>仮.mov</code>・<code>早送りなれージョン希望.mov/.mp4</code>：編集済みの書き出し（元素材ではない）</li><li><code>A.mp4</code>・<code>video_2026-10-2x_*.mp4</code>：本編で使った参考映像（他の人の動画・画像。ショートには使わない方がよい）</li><li><code>追加/画面収録 2026-10-28 *.mov</code>（6本）：Bambu Studio・Cults3Dの画面収録（フェンダーのデータ準備）</li></ul>
+<h3>メモ</h3>
+<ul><li>素材の多くは固定カメラの引き（C2813・C2814・C2921・C2933〜C2935）で、ピント・明るさは安定している。</li><li>暗い・ピントが甘いのは、夜の車のフェンダー合わせ（C2929〜C2932）と、PC画面のスマホ撮り（C2925）。</li><li>手持ちで動きが大きいのは、C2917の頭・C2920の44〜62秒・C2937・C2938・IMG_0926の終わり・IMG_0927/0928/0930。</li><li>プリンターが動いている画（騒音の説明用）は C2927（P2Sの印刷中の寄り・232秒）と C2911（2台の中・8秒）。</li><li>部屋側の動線（PCで指示を出す）は C2922（部屋のPCデスク・背中から）と C2923（PC画面と手元）。</li></ul></div><h2 id="rules">いま有効な編集ルール（クラウド側から見た一覧）</h2><div class="table-scroll"><h1>いま有効な編集ルール（クラウド側から見た一覧）</h1>
+<p>編集連携担当が、inboxに書いた変更をここにまとめて最新の状態に保ちます。手元のClaude Codeのメモリとの差分確認用です。</p>
+<p>最終更新：2026-11-04</p>
+<h2>冒頭</h2>
+<ul>
+<li>見どころダイジェスト（約30秒・起承転・1カット1.5秒以内・答えは見せない・1フレーム目が一番強い画）</li>
+<li>アイキャッチ1.5秒以内（BGMを切らない）→ 名乗り3秒以内 → 何の動画かを一言 → 本編は0:40ごろまでに</li>
+<li>動きのあるフック（カメラに向かってパンチなど）を入れる</li>
+<li>ロゴのオープニング、BGMだけの間は入れない</li>
+</ul>
+<h2>本編</h2>
+<ul>
+<li>本編の最初に一番の見どころ</li>
+<li>2〜3分おきに再フック（テロップ＋効果音）</li>
+<li>数字（値段・サイズ・距離など）は毎回同じ位置・同じ見た目で大きく</li>
+<li>比較画面は位置と色を固定、グレーディングなし（かける場合は全台同じ）、注記を入れる</li>
+<li>PRの部分も通常回と同じテンポ・調子</li>
+</ul>
+<h2>終わり</h2>
+<ul>
+<li>結論はBGMを変えて区切り、表は3秒以上</li>
+<li>保存用のまとめ表（概要欄にも）</li>
+<li>関連動画への誘導と、質問形式のコメント促し</li>
+</ul>
+<h2>音</h2>
+<ul>
+<li>声 -10dB／効果音 -20〜-25dB／BGM -30dB前後</li>
+</ul>
+<h2>ショート</h2>
+<ul>
+<li><strong>最初の0.2秒が勝負</strong>：0.0秒目から効果音、0.0秒目から動きのある画（ズーム・揺れ・動作）、一番インパクトのある「問題」か「変化」の画から入る。完成形の静止画やBGMだけで始めない</li>
+<li>0.2秒以内に大きな文字で「何の動画か」。0〜1秒でBefore→Afterを一瞬見せる。声は1秒以内に入れる</li>
+<li>2秒以上同じ画を止めない。早回しにもカットごとに効果音</li>
+<li>字幕は画面の真ん中より少し下まで。同時に出す文字は2か所まで</li>
+<li>出典：inbox/2026-11-04_ショート冒頭の作り直し.md（高橋さんのフィードバック）</li>
+<li>横動画の編集時に、ショート向きの場面に印を付けておく</li>
+<li>縦 1080×1920。フレームレートは元のタイムラインに合わせる。元のタイムラインは変えず、新しいタイムラインで作る</li>
+<li>尺は45〜50秒以内（50秒を超えない）</li>
+<li>構成の型：0〜0.5秒 結果・数字（完成形の画＋短いテロップ＋効果音1発）→ Before（悩み）→ 作業（早回し・1カット1〜1.5秒）→ After（完成形）→ 締め（本編への誘導の一言）。最後の画を冒頭と同じ構図にしてループさせる</li>
+<li>名乗り・挨拶・ロゴ・「チャンネル登録お願いします」は入れない。答えを全部言わず本編へ行く理由を残す</li>
+<li>テロップは手元の型を優先。位置は上1/3〜中央。下から約670px・右から約190pxには重要な文字を置かない（外部の目安。実機で確認）。1行10文字以内・2行まで、数字は大きく同じ位置</li>
+<li>音量は横動画と同じ（声 -10dB／効果音 -20〜-25dB／BGM -30dB前後）。BGMは最後まで切らない</li>
+<li>16:9素材はズーム・位置で人物と主役の物を中央に。動きが欲しい所はゆっくりパンかズーム</li>
+<li>タイトルは冒頭に数字か結果＋短い1文＋【ガレージ秘密基地】などのシリーズ名。「ヤバすぎ」系は使わない</li>
+<li>関連動画に本編を設定。固定コメントは本編への誘導＋質問形式</li>
+<li>確認：公開48時間後の再生数を配線・デスク系ショートの中央値4.1万回（全体中央値1.0万回）と比べる。本編の流入元で「ショート」からの視聴が増えたか</li>
+</ul>
+<h2>出典</h2>
+<ul>
+<li>inbox/2026-11-04_これまでに決まった編集ルール.md</li>
+<li>inbox/2026-11-04_ショート_3Dプリンター作業台.md（ショートの型。根拠：research/2026-11-04_全動画分析.md、ショート計画_2026-11-04.md、さぬさんnote_要点.md、research/2026-11-04_同規模チャンネル調査_v2.md、外部の目安はinbox内に出典URL）</li>
+</ul>
+<h2>手元との差分</h2>
+<ul>
+<li>手元の編集ルール.md は「未記入」のまま（2026-11-04時点）。テロップの型・BGMの音源・書き出し設定は手元のルールが正</li>
+</ul></div><h2 id="prev">前回の指示（2026-11-04・2件目、v2に置き換え）：ショートの冒頭0.2秒の作り直し</h2><div class="table-scroll"><h1>ショートの冒頭0.2秒の作り直し（3Dプリンター作業台ショートの反省から）</h1>
+<ul>
+<li>状態：未反映</li>
+<li>書いた日：2026-11-04</li>
+<li>書いた人：編集連携担当（taka-edit-liaison）／高橋さんのフィードバック</li>
+<li>優先度：高</li>
+<li>適用範囲：ショートすべて（次の日曜のショートから）</li>
+<li>いつから：次のショートから。3Dプリンター作業台ショートを作り直す場合はそれにも</li>
+</ul>
+<h2>なぜ（背景と根拠）</h2>
+<ul>
+<li>高橋さんの判断：ショートは、スワイプする手を止めるために <strong>最初の0.2秒が勝負</strong>。いかにキャッチーな見た目で目を惹きつけるか。初手から効果音を入れる</li>
+<li>11/4公開の3Dプリンター作業台ショート（36秒）の分析：</li>
+<li>0〜3秒：完成したラックの同じ画が3秒止まったまま。寄り・カット・動きなし。音はBGMだけ（声は3.0秒から。冒頭に効果音なし）</li>
+<li>7.5〜12.9秒：騒音の話をしているのに、静かな完成形が約5秒止まったまま</li>
+<li>12.9〜22秒：作業の早回しは約1.25秒ごとに切り替わっているが、音はBGMだけで効果音なし</li>
+<li>「何の動画か」が冒頭で伝わらない（完成形だけでは、問題も変化も分からない）</li>
+<li>クラウド側の指示も「0〜0.5秒は完成形」としていた。完成形の静止画から入る設計自体が弱かった</li>
+</ul>
+<h2>何を変えるか（ショートの冒頭の新ルール）</h2>
+<ol>
+<li><strong>0.0秒目から効果音</strong>（インパクト系の「ドン」「バン」など）。BGMだけで始めない</li>
+<li><strong>0.0秒目から動きのある画</strong>：ズームイン（約110%→100%を0.2秒で）、揺れ、物が動く・倒れる・叩く、たかさんの動き（パンチ・指さし）のどれか。止まった画で始めない</li>
+<li><strong>一番インパクトのある「問題」か「変化」の画から入る</strong>：完成形の静止画ではなく、曲がった机・暴れるプリンター・騒音・Before→Afterの一瞬の切り替えなど、「えっ？」となる画</li>
+<li><strong>0.2秒以内に大きな文字で「何の動画か」</strong>：短く具体的に（例「3Dプリンターで机が崩壊」「机が曲がった」）。上の見出しは、画面の上1/4に大きく</li>
+<li><strong>0〜1秒の間にBefore→Afterを一瞬見せる</strong>（結果の約束）：例「机が崩壊 → 一歩で工房」</li>
+<li>1〜3秒で問題の続き（声）。声は1秒以内に入れる</li>
+<li>2秒以上同じ画を止めない。作業の早回しにもカットごとに効果音（「シュッ」「カチャ」など）</li>
+<li>字幕は画面の真ん中より少し下まで（下の約3分の1はYouTubeのボタン・タイトルで隠れる）。同時に出す文字は2か所まで</li>
+</ol>
+<h2>3Dプリンター作業台ショートを作り直す場合の冒頭（例）</h2>
+<table>
+<thead>
+<tr>
+<th>秒</th>
+<th>画</th>
+<th>音</th>
+<th>文字</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0.0〜0.4</td>
+<td>曲がった机のアップに急ズーム（または机の上で揺れるプリンター）</td>
+<td>「ドン」＋プリンターの動作音</td>
+<td>「3Dプリンターで机が崩壊」（大きく）</td>
+</tr>
+<tr>
+<td>0.4〜0.9</td>
+<td>完成したラックに一瞬切り替え（フラッシュ）</td>
+<td>「シャキーン」系</td>
+<td>「→ 一歩で工房」</td>
+</tr>
+<tr>
+<td>0.9〜3.0</td>
+<td>机の曲がりを指さす（元の3〜5.5秒の素材）</td>
+<td>声「こうしてみると机の曲がりやばい」</td>
+<td>字幕</td>
+</tr>
+<tr>
+<td>3.0〜7.0</td>
+<td>動作中のプリンター、騒音（耳をふさぐ等）</td>
+<td>プリンター音＋声</td>
+<td>「音もうるさい」</td>
+</tr>
+<tr>
+<td>7.0〜</td>
+<td>撤去→組み立て→運ぶ（カットごとに効果音）→完成→本編へ</td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h2>DaVinciでの目安</h2>
+<ul>
+<li>ズームインはインスペクタのズームにキーフレーム（0フレーム目110%→5フレーム目100%前後）。手元のやり方を優先（要確認）</li>
+<li>効果音の音量は -20〜-25dB、BGMは -30dB前後（冒頭の効果音は少し大きめでもよいが、ピークが-1dBを超えないように）</li>
+</ul>
+<h2>確認のしかた</h2>
+<ul>
+<li>公開後48時間：YouTube Studioのショートの「視聴を続けた割合（スワイプされずに見られた割合）」と再生数を、11/4公開の3Dプリンター作業台ショートと比べる</li>
+</ul>
+<h2>手元側のメモ</h2>
+<p>（手元のClaude Codeが記入）</p></div></div>
